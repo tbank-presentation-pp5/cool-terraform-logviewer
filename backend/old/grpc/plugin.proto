@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package terraform_logviewer;
+
+service LogProcessor {
+  rpc ProcessLogs(ProcessLogsRequest) returns (ProcessLogsResponse);
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+}
+
+message LogEntry {
+  string id = 1;
+  string timestamp = 2;
+  string level = 3;
+  string message = 4;
+  string module = 5;
+  string tf_req_id = 6;
+  string tf_resource_type = 7;
+  string tf_data_source_type = 8;
+  string tf_rpc = 9;
+  string tf_provider_addr = 10;
+  string operation = 11;
+  map<string, string> metadata = 12;
+  string raw_data = 13;
+}
+
+message ProcessLogsRequest {
+  repeated LogEntry entries = 1;
+  string plugin_config = 2;
+}
+
+message ProcessLogsResponse {
+  repeated LogEntry entries = 1;
+  map<string, string> statistics = 2;
+  string error = 3;
+}
+
+message GetCapabilitiesRequest {}
+
+message GetCapabilitiesResponse {
+  repeated string capabilities = 1;
+  string version = 2;
+}

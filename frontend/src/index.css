@@ -1,0 +1,116 @@
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  .log-uploader {
+    padding: 20px;
+  }
+  
+  .log-viewer {
+    padding: 20px;
+  }
+  
+  .log-entry {
+    border: 1px solid #ddd;
+    margin: 8px 0;
+    padding: 12px;
+    border-radius: 6px;
+    background: #fafafa;
+  }
+  
+  .log-entry.level-error {
+    border-left: 4px solid #ff4d4f;
+    background: #fff2f0;
+  }
+  
+  .log-entry.level-warn {
+    border-left: 4px solid #faad14;
+    background: #fffbe6;
+  }
+  
+  .log-entry.level-info {
+    border-left: 4px solid #1890ff;
+    background: #f0f8ff;
+  }
+  
+  .entry-header {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .timestamp {
+    color: #666;
+    font-size: 0.9em;
+  }
+  
+  .level {
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  
+  .operation {
+    background: #e6f7ff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+  }
+  
+  .req-id {
+    background: #f6ffed;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    color: #52c41a;
+  }
+  
+  .filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .filters select, .filters input {
+    padding: 8px 12px;
+    border: 1px solid #d9d9d9;
+    border-radius: 6px;
+  }
+  
+  .statistics {
+    background: #f5f5f5;
+    padding: 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+  }
+  
+  .op-stats {
+    margin: 8px 0;
+  }
+  
+  .competition-dashboard {
+    padding: 20px;
+  }
+  
+  .summary-row {
+    margin-bottom: 24px;
+  }
+  
+  .quality-card, .errors-card, .features-card, .performance-card {
+    margin-bottom: 24px;
+  }
+  
+  .quality-grade {
+    text-align: center;
+    margin-top: 16px;
+  }
+  
+  .error-category {
+    margin-bottom: 16px;
+  }
