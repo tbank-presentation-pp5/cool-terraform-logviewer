@@ -107,7 +107,7 @@ class App extends React.Component {
         <Sider collapsible>
           <div className="logo">
             <Title level={5} style={{ color: 'white', textAlign: 'center', padding: '3px' }}>
-              🚀 TF LogViewer
+              TF LogViewer
             </Title>
           </div>
           <Menu

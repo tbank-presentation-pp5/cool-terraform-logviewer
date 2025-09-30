@@ -59,7 +59,7 @@ const ExportPanel = () => {
 
     return (
         <div className="export-panel">
-            <Card title="📤 Export Terraform Logs">
+            <Card title="Export Terraform Logs">
                 <Alert
                     message="Export Options"
                     description="Export your Terraform logs in various formats for analysis or sharing with your team."

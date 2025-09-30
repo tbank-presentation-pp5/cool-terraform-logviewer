@@ -64,7 +64,7 @@ const LogViewer = () => {
 
     return (
         <div className="log-viewer">
-            <Card title="📊 Terraform Log Viewer">
+            <Card title="Terraform Log Viewer">
                 {/* Фильтры */}
                 <div className="filters">
                     <Select 

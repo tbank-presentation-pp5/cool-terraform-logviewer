@@ -156,7 +156,7 @@ const EnhancedLogViewer = () => {
 
     return (
         <div className="log-viewer">
-            <Card title="📊 Enhanced Terraform Log Viewer" extra={
+            <Card title="Enhanced Terraform Log Viewer" extra={
                 <Button onClick={loadLogs}>Refresh</Button>
             }>
                 {/* Улучшенные фильтры */}

@@ -54,7 +54,7 @@ const LogUploader = ({ onLogsUpdate }) => {
 
   return (
     <div className="log-uploader">
-      <Card title="📤 Upload Terraform Logs" style={{ marginBottom: 24 }}>
+      <Card title="Upload Terraform Logs" style={{ marginBottom: 24 }}>
         <Dragger {...uploadProps} disabled={uploading}>
           <p className="ant-upload-drag-icon">
             <InboxOutlined />

@@ -70,7 +70,7 @@ const GanttChart = () => {
     return (
         <div className="gantt-chart">
             <Card 
-                title="📅 Terraform Operations Timeline" 
+                title="Terraform Operations Timeline" 
                 extra={
                     <Select value={filter} onChange={setFilter} style={{ width: 120 }}>
                         <Option value="all">All Operations</Option>

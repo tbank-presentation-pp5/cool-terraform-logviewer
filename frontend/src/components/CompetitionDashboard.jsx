@@ -136,7 +136,7 @@ const CompetitionDashboard = () => {
         <div className="competition-dashboard">
             {/* Заголовок конкурса */}
             <div className="competition-header">
-                <h1>🏆 Terraform LogViewer Pro - Competition Edition</h1>
+                <h1>Terraform LogViewer Pro - Competition Edition</h1>
                 <Button 
                     type="primary" 
                     icon={<ExportOutlined />}
@@ -193,7 +193,7 @@ const CompetitionDashboard = () => {
             </Row>
 
             {/* Оценка качества */}
-            <Card title="📊 Configuration Quality Assessment" className="quality-card">
+            <Card title="Configuration Quality Assessment" className="quality-card">
                 <Row gutter={16}>
                     <Col span={12} style={{ textAlign: 'center' }}>
                         <Progress 
@@ -234,7 +234,7 @@ const CompetitionDashboard = () => {
             </Card>
 
             {/* Функции системы */}
-            <Card title="🛠️ System Features" className="features-card">
+            <Card title="System Features" className="features-card">
                 <Alert
                     message="Active Features"
                     description="All system features are operational and ready for demonstration"

@@ -91,7 +91,7 @@ const RealTimeDashboard = () => {
     return (
         <div className="real-time-dashboard">
             <Card 
-                title="🏠 Real-Time Terraform Dashboard" 
+                title="Real-Time Terraform Dashboard" 
                 extra={
                     <Button icon={<ReloadOutlined />} onClick={loadData}>
                         Refresh
@@ -168,7 +168,7 @@ const RealTimeDashboard = () => {
 
                 {/* Распределение операций */}
                 {statistics.operations && Object.keys(statistics.operations).length > 0 && (
-                    <Card title="📊 Operations Distribution" style={{ marginBottom: 24 }}>
+                    <Card title="Operations Distribution" style={{ marginBottom: 24 }}>
                         <Row gutter={16}>
                             {Object.entries(statistics.operations).map(([op, count]) => (
                                 <Col span={6} key={op}>
@@ -190,7 +190,7 @@ const RealTimeDashboard = () => {
                 )}
 
                 {/* Последние логи */}
-                <Card title="📝 Recent Log Stream">
+                <Card title="Recent Log Stream">
                     <List
                         dataSource={logs}
                         renderItem={log => (
