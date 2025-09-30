@@ -39,22 +39,7 @@ cd frontend
 npm run dev
 ```
 
-4. **Запустите фронтенд:**
-
-```bash
-cd frontend
-npm run dev
-```
-
-5. В новом терминале запустите фронтенд  
-
-```bash
-cd ../frontend
-npm install
-npm run dev
-```
-
-6. Откройте http://localhost:3000
+4. Откройте http://localhost:3000
 
 ### Вариант 2: Docker запуск
 
@@ -73,7 +58,7 @@ docker-compose up -d
 ## 🏗️ Архитектура
 
 - **Бэкенд:** FastAPI + SQLite + WebSockets
-- **Фронтенд:** React + Ant Design + Chart.js
+- **Фронтенд:** React + Ant Design
 - **Плагины:** gRPC на Python
 - **База данных:** SQLite с индексами
 
@@ -89,11 +74,11 @@ python performance_analyzer.py
 
 ## 📈 API Endpoints
 
-- `POST /api/upload` - Загрузка логов
-- `GET /api/entries` - Получение логов с фильтрацией
-- `GET /api/gantt-data` - Данные для диаграмм Ганта
-- `GET /api/statistics` - Статистика по логам
-- `WS /ws/logs` - WebSocket для real-time логов
+- `POST /api/v2/upload` - Загрузка логов
+- `GET /api/v2/entries` - Получение логов с фильтрацией
+- `GET /api/v2/gantt-data` - Данные для диаграмм Ганта
+- `GET /api/v2/statistics` - Статистика по логам
+- `WS /ws` - WebSocket "для real-time логов"
 
 ## 🏆 Для хакатона
 
