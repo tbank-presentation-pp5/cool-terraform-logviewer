@@ -68,7 +68,6 @@ const LogViewer = () => {
                 {/* Фильтры */}
                 <div className="filters">
                     <Select 
-                        value={filters.operation} 
                         onChange={value => setFilters({...filters, operation: value})}
                         placeholder="Operation"
                         style={{ width: 150 }}
@@ -77,10 +76,10 @@ const LogViewer = () => {
                         <Option value="plan">Plan</Option>
                         <Option value="apply">Apply</Option>
                         <Option value="validate">Validate</Option>
+                        <Option value="unknown">Unknown</Option>
                     </Select>
 
                     <Select 
-                        value={filters.level}
                         onChange={value => setFilters({...filters, level: value})}
                         placeholder="Log Level"
                         style={{ width: 150 }}
