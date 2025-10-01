@@ -26,7 +26,8 @@ def read_gitignore(root_path):
         'venv/Lib',
         'venv',
         'node_modules',
-        'old'
+        'old',
+        '.gitignore'
     ]
     
     ignore_patterns.extend(base_ignores)
