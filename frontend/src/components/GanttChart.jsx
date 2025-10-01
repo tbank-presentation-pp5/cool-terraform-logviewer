@@ -16,7 +16,7 @@ const GanttChart = () => {
         try {
             const response = await fetch('http://localhost:8000/api/v2/gantt-data');
             const data = await response.json();
-            setGanttData(data);
+            setGanttData(data.gantt_data);
         } catch (error) {
             console.error('Failed to load gantt data:', error);
         }

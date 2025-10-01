@@ -43,17 +43,17 @@ class TerraformLogEntry(BaseModel):
     duration_ms: Optional[int] = None
     json_blocks: List[Dict] = Field(default_factory=list)
     read: bool = False
+    parse_error: bool = False  # Новое поле для пометки ошибок парсинга
+    error_type: Optional[str] = None  # Тип ошибки парсинга
 
-    # Исправляем сериализацию для API
     def to_dict(self):
         data = self.model_dump()
-        # Преобразуем Enum в строки для JSON
         data['level'] = self.level.value
         data['operation'] = self.operation.value
         return data
 
-# ========== ENHANCED PARSER WITH HEURISTICS ==========
-class AdvancedTerraformParser:
+# ========== ENHANCED PARSER WITH ROBUST JSON HANDLING ==========
+class RobustTerraformParser:
     def __init__(self):
         self.plan_patterns = [
             r'terraform.*plan',
@@ -96,82 +96,207 @@ class AdvancedTerraformParser:
         
         for line_num, line in enumerate(lines, 1):
             if line.strip():
-                entry = self.parse_line(line, line_num, filename)
+                entry = self.parse_line_robust(line, line_num, filename)
                 if entry:
                     entries.append(entry)
         
         return self._enhance_with_relationships(entries)
 
-    def parse_line(self, line: str, line_num: int, filename: str = "") -> Optional[TerraformLogEntry]:
+    def parse_line_robust(self, line: str, line_num: int, filename: str = "") -> Optional[TerraformLogEntry]:
+        """Улучшенный парсер с обработкой сломанных JSON"""
+        original_line = line
+        
+        # Попытка 1: Стандартный JSON парсинг
         try:
             data = json.loads(line)
+            return self._create_entry_from_data(data, line_num, filename, line)
+        except json.JSONDecodeError as e:
+            # Попытка 2: Восстановление неполного JSON
+            repaired_data = self._repair_json_line(line)
+            if repaired_data:
+                try:
+                    data = json.loads(repaired_data)
+                    return self._create_entry_from_data(data, line_num, filename, line, parse_error=True, error_type="repaired_json")
+                except:
+                    pass
             
-            # Эвристики для временных меток и уровней
-            timestamp = self._heuristic_parse_timestamp(data)
-            level = self._heuristic_detect_level(data)
+            # Попытка 3: Извлечение полей через регулярные выражения
+            extracted_data = self._extract_fields_with_regex(line)
+            if extracted_data:
+                return self._create_entry_from_data(extracted_data, line_num, filename, line, parse_error=True, error_type="regex_extracted")
             
-            # Эвристики для определения операции
-            operation = self._heuristic_detect_operation(data, filename)
-            
-            # Эвристики для tf_req_id
-            tf_req_id = self._heuristic_find_req_id(data)
-            
-            # Извлечение JSON блоков
-            json_blocks = self._extract_json_blocks(data)
-
-            return TerraformLogEntry(
-                id=f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(line.encode()).hexdigest()[:8]}",
-                timestamp=timestamp,
-                level=level,
-                message=data.get('@message', ''),
-                module=data.get('@module'),
-                tf_req_id=tf_req_id,
-                tf_resource_type=data.get('tf_resource_type'),
-                tf_data_source_type=data.get('tf_data_source_type'),
-                tf_rpc=data.get('tf_rpc'),
-                tf_provider_addr=data.get('tf_provider_addr'),
-                operation=operation,
-                raw_data=data,
-                json_blocks=json_blocks
-            )
-            
+            # Попытка 4: Создание записи об ошибке
+            return self._create_error_entry(line, line_num, filename, str(e))
+        
         except Exception as e:
-            print(f"Parse error line {line_num}: {e}")
-            return None
+            # Любая другая ошибка
+            return self._create_error_entry(line, line_num, filename, f"unexpected_error: {str(e)}")
 
-    def _heuristic_parse_timestamp(self, data: Dict) -> datetime:
-        """Эвристики для парсинга временных меток"""
-        timestamp_str = data.get('@timestamp')
+    def _repair_json_line(self, line: str) -> Optional[str]:
+        """Пытается восстановить сломанный JSON"""
+        # Случай 1: Не закрытая фигурная скобка
+        if line.startswith('{') and not line.endswith('}'):
+            # Добавляем закрывающую скобку и возможные кавычки
+            repaired = line.strip()
+            if not repaired.endswith('"'):
+                repaired += '"'
+            repaired += '}'
+            return repaired
+        
+        # Случай 2: Не хватает кавычек
+        if ': {' in line and not line.endswith('}'):
+            return line + '}'
+        
+        # Случай 3: Частичный JSON в начале строки
+        json_match = re.search(r'(\{.*)', line)
+        if json_match:
+            partial_json = json_match.group(1)
+            if not partial_json.endswith('}'):
+                partial_json += '}'
+            return partial_json
+        
+        return None
+
+    def _extract_fields_with_regex(self, line: str) -> Dict[str, Any]:
+        """Извлекает поля лога через регулярные выражения"""
+        extracted = {}
+        
+        # Паттерны для извлечения common полей
+        patterns = {
+            'timestamp': r'"@timestamp"\s*:\s*"([^"]+)"',
+            'level': r'"@level"\s*:\s*"([^"]+)"',
+            'message': r'"@message"\s*:\s*"([^"]*)"',
+            'module': r'"@module"\s*:\s*"([^"]*)"',
+            'tf_req_id': r'"tf_req_id"\s*:\s*"([^"]*)"',
+            'tf_resource_type': r'"tf_resource_type"\s*:\s*"([^"]*)"',
+            'tf_rpc': r'"tf_rpc"\s*:\s*"([^"]*)"'
+        }
+        
+        for field, pattern in patterns.items():
+            match = re.search(pattern, line)
+            if match:
+                extracted[f"@{field}" if field in ['timestamp', 'level', 'message', 'module'] else field] = match.group(1)
+        
+        # Если нашли хоть что-то, возвращаем
+        return extracted if extracted else None
+
+    def _create_entry_from_data(self, data: Dict, line_num: int, filename: str, original_line: str, 
+                              parse_error: bool = False, error_type: str = None) -> TerraformLogEntry:
+        """Создает запись из данных с эвристиками"""
+        # Эвристики для временных меток и уровней
+        timestamp = self._heuristic_parse_timestamp(data, original_line)
+        level = self._heuristic_detect_level(data, original_line)
+        
+        # Эвристики для определения операции
+        operation = self._heuristic_detect_operation(data, filename, original_line)
+        
+        # Эвристики для tf_req_id
+        tf_req_id = self._heuristic_find_req_id(data, original_line)
+        
+        # Извлечение JSON блоков
+        json_blocks = self._extract_json_blocks(data)
+
+        return TerraformLogEntry(
+            id=f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(original_line.encode()).hexdigest()[:8]}",
+            timestamp=timestamp,
+            level=level,
+            message=data.get('@message', data.get('message', original_line[:200])),
+            module=data.get('@module', data.get('module')),
+            tf_req_id=tf_req_id,
+            tf_resource_type=data.get('tf_resource_type'),
+            tf_data_source_type=data.get('tf_data_source_type'),
+            tf_rpc=data.get('tf_rpc'),
+            tf_provider_addr=data.get('tf_provider_addr'),
+            operation=operation,
+            raw_data=data,
+            json_blocks=json_blocks,
+            parse_error=parse_error,
+            error_type=error_type
+        )
+
+    def _create_error_entry(self, line: str, line_num: int, filename: str, error: str) -> TerraformLogEntry:
+        """Создает запись об ошибке парсинга"""
+        timestamp = self._extract_timestamp_from_line(line) or datetime.now()
+        
+        return TerraformLogEntry(
+            id=f"error-{timestamp.timestamp()}-{line_num}-{hashlib.md5(line.encode()).hexdigest()[:8]}",
+            timestamp=timestamp,
+            level=LogLevel.ERROR,
+            message=f"JSON_PARSE_ERROR: {error} - {line[:100]}...",
+            module="parser",
+            operation=OperationType.UNKNOWN,
+            raw_data={"original_line": line, "error": error},
+            parse_error=True,
+            error_type="json_parse_error"
+        )
+
+    def _extract_timestamp_from_line(self, line: str) -> Optional[datetime]:
+        """Извлекает timestamp из строки через регулярки"""
+        # Паттерны для timestamp
+        patterns = [
+            r'\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}',
+            r'\d{2}:\d{2}:\d{2}',
+            r'\d{4}-\d{2}-\d{2}'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, line)
+            if match:
+                try:
+                    timestamp_str = match.group()
+                    # Пытаемся разобрать разные форматы
+                    for fmt in ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S', '%H:%M:%S']:
+                        try:
+                            if fmt == '%H:%M:%S':
+                                # Для времени без даты используем сегодняшнюю дату
+                                today = datetime.now().date()
+                                time_str = timestamp_str
+                                return datetime.combine(today, datetime.strptime(time_str, fmt).time())
+                            return datetime.strptime(timestamp_str, fmt)
+                        except:
+                            continue
+                except:
+                    continue
+        return None
+
+    def _heuristic_parse_timestamp(self, data: Dict, original_line: str = "") -> datetime:
+        """Улучшенные эвристики для парсинга временных меток"""
+        timestamp_str = data.get('@timestamp') or data.get('timestamp')
         
         if timestamp_str:
             try:
-                return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                # Обработка различных форматов timestamp
+                if 'T' in timestamp_str:
+                    return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                else:
+                    # Пробуем разные форматы
+                    for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f']:
+                        try:
+                            return datetime.strptime(timestamp_str, fmt)
+                        except:
+                            continue
             except:
                 pass
         
-        # Эвристика: ищем timestamp в сообщении
-        message = data.get('@message', '')
-        timestamp_match = re.search(r'\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}', message)
-        if timestamp_match:
-            try:
-                return datetime.fromisoformat(timestamp_match.group().replace(' ', 'T') + '+00:00')
-            except:
-                pass
+        # Эвристика из сообщения
+        extracted_ts = self._extract_timestamp_from_line(original_line or data.get('@message', ''))
+        if extracted_ts:
+            return extracted_ts
                 
         return datetime.now()
 
-    def _heuristic_detect_level(self, data: Dict) -> LogLevel:
-        """Эвристики для определения уровня логирования"""
-        level_str = data.get('@level')
+    def _heuristic_detect_level(self, data: Dict, original_line: str = "") -> LogLevel:
+        """Улучшенные эвристики для определения уровня логирования"""
+        level_str = data.get('@level') or data.get('level')
         if level_str:
             try:
                 return LogLevel(level_str.lower())
             except:
                 pass
         
-        # Эвристики по тексту сообщения
-        message = data.get('@message', '').lower()
-        if any(word in message for word in ['error', 'failed', 'failure', 'panic']):
+        # Эвристики по тексту
+        message = (data.get('@message') or data.get('message') or original_line or "").lower()
+        if any(word in message for word in ['error', 'failed', 'failure', 'panic', 'crash']):
             return LogLevel.ERROR
         elif any(word in message for word in ['warn', 'warning']):
             return LogLevel.WARN
@@ -184,9 +309,9 @@ class AdvancedTerraformParser:
             
         return LogLevel.INFO
 
-    def _heuristic_detect_operation(self, data: Dict, filename: str) -> OperationType:
-        """Эвристики для определения операции (plan/apply/validate)"""
-        message = data.get('@message', '').lower()
+    def _heuristic_detect_operation(self, data: Dict, filename: str, original_line: str = "") -> OperationType:
+        """Улучшенные эвристики для определения операции"""
+        message = (data.get('@message') or data.get('message') or original_line or "").lower()
         tf_rpc = data.get('tf_rpc', '')
         
         # Проверяем RPC методы
@@ -216,32 +341,37 @@ class AdvancedTerraformParser:
             
         return OperationType.UNKNOWN
 
-    def _heuristic_find_req_id(self, data: Dict) -> Optional[str]:
-        """Эвристики для поиска tf_req_id"""
+    def _heuristic_find_req_id(self, data: Dict, original_line: str = "") -> Optional[str]:
+        """Улучшенные эвристики для поиска tf_req_id"""
         req_id = data.get('tf_req_id')
         if req_id:
             return req_id
             
         # Эвристика: ищем в сообщении
-        message = data.get('@message', '')
-        req_match = re.search(r'req[_\-]?id[=:\s]+([a-f0-9\-]+)', message, re.IGNORECASE)
-        if req_match:
-            return req_match.group(1)
+        message = data.get('@message') or data.get('message') or original_line or ""
+        patterns = [
+            r'req[_\-]?id[=:\s]+([a-f0-9\-]+)',
+            r'request[_-]id[=:\s]+([a-f0-9\-]+)',
+            r'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})'  # UUID
+        ]
+        
+        for pattern in patterns:
+            req_match = re.search(pattern, message, re.IGNORECASE)
+            if req_match:
+                return req_match.group(1)
             
         return None
 
     def _extract_json_blocks(self, data: Dict) -> List[Dict]:
-        """Извлекает JSON блоки из tf_http_req_body и tf_http_res_body"""
+        """Извлекает JSON блоки"""
         json_blocks = []
         
-        # Проверяем поля с JSON
-        json_fields = ['tf_http_req_body', 'tf_http_res_body']
+        json_fields = ['tf_http_req_body', 'tf_http_res_body', 'body', 'request', 'response']
         
         for field in json_fields:
             if field in data and data[field]:
                 try:
                     json_data = data[field]
-                    # Если это строка, пытаемся распарсить
                     if isinstance(json_data, str):
                         json_data = json.loads(json_data)
                     
@@ -251,7 +381,6 @@ class AdvancedTerraformParser:
                         'expanded': False
                     })
                 except (json.JSONDecodeError, TypeError):
-                    # Если не удалось распарсить, оставляем как есть
                     json_blocks.append({
                         'type': field,
                         'data': data[field],
@@ -265,128 +394,154 @@ class AdvancedTerraformParser:
         """Добавляем информацию о зависимостях и длительности"""
         req_groups = {}
         
-        # Группируем по tf_req_id
         for entry in entries:
             if entry.tf_req_id:
                 if entry.tf_req_id not in req_groups:
                     req_groups[entry.tf_req_id] = []
                 req_groups[entry.tf_req_id].append(entry)
 
-        # Вычисляем длительность для групп
         for req_id, group_entries in req_groups.items():
             if len(group_entries) > 1:
-                start_time = min(e.timestamp for e in group_entries)
-                end_time = max(e.timestamp for e in group_entries)
-                duration = int((end_time - start_time).total_seconds() * 1000)
-                
-                for entry in group_entries:
-                    entry.duration_ms = duration
+                valid_entries = [e for e in group_entries if e.timestamp]
+                if valid_entries:
+                    start_time = min(e.timestamp for e in valid_entries)
+                    end_time = max(e.timestamp for e in valid_entries)
+                    duration = max(1, int((end_time - start_time).total_seconds() * 1000))  # Минимум 1 мс
+                    
+                    for entry in group_entries:
+                        entry.duration_ms = duration
 
         return entries
 
-# ========== GANTT CHART GENERATOR ==========
-class GanttGenerator:
+# ========== IMPROVED GANTT CHART GENERATOR ==========
+class ImprovedGanttGenerator:
     def generate_gantt_data(self, entries: List[TerraformLogEntry]) -> List[Dict[str, Any]]:
-        """Генерирует данные для диаграммы Ганта на основе tf_req_id"""
+        """Улучшенный генератор данных для диаграммы Ганта"""
         
-        # Группируем по tf_req_id
+        # Группируем по tf_req_id и операциям
         groups = {}
         for entry in entries:
             if entry.tf_req_id:
-                if entry.tf_req_id not in groups:
-                    groups[entry.tf_req_id] = []
-                groups[entry.tf_req_id].append(entry)
+                group_key = f"{entry.tf_req_id}-{entry.operation.value}"
+                if group_key not in groups:
+                    groups[group_key] = []
+                groups[group_key].append(entry)
         
         gantt_data = []
         
-        for req_id, group_entries in groups.items():
-            if len(group_entries) < 2:
-                continue  # Пропускаем группы с одной записью
+        for group_key, group_entries in groups.items():
+            valid_entries = [e for e in group_entries if e.timestamp]
+            if len(valid_entries) < 1:
+                continue
                 
             # Находим временной диапазон группы
-            timestamps = [e.timestamp for e in group_entries]
+            timestamps = [e.timestamp for e in valid_entries]
             start_time = min(timestamps)
             end_time = max(timestamps)
             duration = (end_time - start_time).total_seconds()
+            
+            # Минимальная длительность для отображения на timeline
+            min_duration = 1  # 1 секунда минимум
             
             # Определяем операцию и ресурсы
             operation = self._detect_group_operation(group_entries)
             resources = list(set(e.tf_resource_type for e in group_entries if e.tf_resource_type))
             
             gantt_data.append({
-                'id': req_id,
-                'task': f"{operation} - {', '.join(resources) if resources else 'General'}",
+                'id': group_key,
+                'task': self._format_task_name(operation, resources),
                 'start': start_time.isoformat(),
                 'end': end_time.isoformat(),
                 'resource': ', '.join(resources) if resources else 'General',
-                'duration': duration,
+                'duration': max(duration, min_duration),  # Гарантируем минимальную длительность
                 'type': operation,
                 'entry_count': len(group_entries),
-                'resources': resources
+                'resources': resources,
+                'raw_duration': duration  # Оригинальная длительность для отладки
             })
         
-        # Сортируем по времени начала
+        # Если нет сгруппированных данных, создаем общие группы по времени
+        if not gantt_data:
+            gantt_data = self._create_time_based_groups(entries)
+        
         return sorted(gantt_data, key=lambda x: x['start'])
+
+    def _format_task_name(self, operation: str, resources: List[str]) -> str:
+        """Форматирует имя задачи для отображения"""
+        if resources:
+            # Ограничиваем количество отображаемых ресурсов
+            display_resources = resources  # Максимум 5 ресурсов
+            resource_str = ', '.join(display_resources)
+            # if len(resources) > 5:
+            #     resource_str += f" (+{len(resources) - 5} more)"
+            return f"{operation} - {resource_str}"
+        else:
+            return f"{operation} - General"
 
     def _detect_group_operation(self, entries: List[TerraformLogEntry]) -> str:
         """Определяет операцию для группы записей"""
         operations = [e.operation.value for e in entries if e.operation != OperationType.UNKNOWN]
         if operations:
-            # Возвращаем самую частую операцию
             return max(set(operations), key=operations.count)
         return 'unknown'
 
-# ========== GRPC PLUGIN IMPLEMENTATION ==========
-class LogProcessorServicer:
-    """Реализация gRPC сервиса для обработки логов"""
-    
-    def ProcessLogs(self, request, context):
-        # Имитация обработки логов через gRPC плагин
-        processed_entries = []
-        error_count = 0
+    def _create_time_based_groups(self, entries: List[TerraformLogEntry]) -> List[Dict[str, Any]]:
+        """Создает группы на основе временных интервалов когда нет tf_req_id"""
+        if not entries:
+            return []
         
-        for entry_data in request.entries:
-            # Логика фильтрации: помечаем ошибки и предупреждения
-            processed_entry = {
-                'id': entry_data.id,
-                'message': entry_data.message,
-                'level': entry_data.level,
-                'metadata': {
-                    'processed_by': 'error_filter_plugin',
-                    'processed_at': datetime.now().isoformat()
-                }
-            }
-            
-            # Логика фильтрации
-            if 'error' in entry_data.message.lower():
-                processed_entry['metadata']['priority'] = 'high'
-                processed_entry['message'] = f"🚨 ERROR: {entry_data.message}"
-                error_count += 1
-            elif 'warn' in entry_data.message.lower():
-                processed_entry['metadata']['priority'] = 'medium' 
-                processed_entry['message'] = f"⚠️ WARN: {entry_data.message}"
+        # Сортируем по времени
+        sorted_entries = sorted(entries, key=lambda x: x.timestamp)
+        
+        # Группируем по 5-секундным интервалам
+        groups = []
+        current_group = []
+        group_start = sorted_entries[0].timestamp
+        
+        for entry in sorted_entries:
+            time_diff = (entry.timestamp - group_start).total_seconds()
+            if time_diff > 5.0 and current_group:  # 5 секунд - новый интервал
+                groups.append(current_group)
+                current_group = [entry]
+                group_start = entry.timestamp
             else:
-                processed_entry['metadata']['priority'] = 'low'
-                
-            processed_entries.append(processed_entry)
+                current_group.append(entry)
         
-        return {
-            'entries': processed_entries,
-            'statistics': {
-                'total_processed': len(processed_entries),
-                'errors_found': error_count,
-                'plugin_version': '1.0.0'
-            }
-        }
+        if current_group:
+            groups.append(current_group)
+        
+        # Создаем gantt данные из временных групп
+        gantt_data = []
+        for i, group in enumerate(groups):
+            if group:
+                start_time = min(e.timestamp for e in group)
+                end_time = max(e.timestamp for e in group)
+                duration = max(1.0, (end_time - start_time).total_seconds())
+                
+                operations = list(set(e.operation.value for e in group))
+                operation = operations[0] if operations else 'unknown'
+                
+                gantt_data.append({
+                    'id': f'time-group-{i}',
+                    'task': f'{operation} - Time Group {i+1}',
+                    'start': start_time.isoformat(),
+                    'end': end_time.isoformat(),
+                    'resource': 'Time-based',
+                    'duration': duration,
+                    'type': operation,
+                    'entry_count': len(group),
+                    'resources': []
+                })
+        
+        return gantt_data
 
 # ========== FASTAPI APP ==========
 app = FastAPI(
-    title="Terraform LogViewer Pro - Competition Edition",
-    description="Professional Terraform log analysis with advanced heuristics and visualization",
-    version="5.0.0"
+    title="Terraform LogViewer Pro - Enhanced Edition",
+    description="Professional Terraform log analysis with robust parsing and improved visualization",
+    version="6.0.0"
 )
 
-# Улучшаем CORS настройки
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -395,9 +550,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Инициализация компонентов
-parser = AdvancedTerraformParser()
-gantt_generator = GanttGenerator()
+# Инициализация улучшенных компонентов
+parser = RobustTerraformParser()
+gantt_generator = ImprovedGanttGenerator()
 
 # "База данных" в памяти
 uploaded_logs: List[TerraformLogEntry] = []
@@ -423,12 +578,12 @@ class WebSocketManager:
 
 websocket_manager = WebSocketManager()
 
-# ========== API ENDPOINTS ==========
+# ========== ENHANCED API ENDPOINTS ==========
 @app.post("/api/v2/upload")
 async def upload_logs_v2(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
-    """Улучшенная загрузка логов с эвристическим анализом"""
-    if not file.filename.endswith(('.json', '.log')):
-        raise HTTPException(400, "Only JSON and log files are supported")
+    """Улучшенная загрузка логов с обработкой ошибок"""
+    if not file.filename.endswith(('.json', '.log', '.txt')):
+        raise HTTPException(400, "Only JSON, log and text files are supported")
     
     try:
         content = (await file.read()).decode('utf-8')
@@ -437,39 +592,38 @@ async def upload_logs_v2(file: UploadFile = File(...), background_tasks: Backgro
         # Сохраняем в память
         uploaded_logs.extend(entries)
         
-        # Анализ загруженных логов
-        operations = list(set(e.operation.value for e in entries))
-        resource_types = list(set(e.tf_resource_type for e in entries if e.tf_resource_type))
-        data_source_types = list(set(e.tf_data_source_type for e in entries if e.tf_data_source_type))
-        
-        # Статистика для отладки
+        # Статистика парсинга
+        parse_errors = [e for e in entries if e.parse_error]
         operation_stats = {}
         for entry in entries:
             op = entry.operation.value
             operation_stats[op] = operation_stats.get(op, 0) + 1
         
+        resource_types = list(set(e.tf_resource_type for e in entries if e.tf_resource_type))
+        
         print(f"DEBUG: Processed {len(entries)} entries")
+        print(f"DEBUG: Parse errors: {len(parse_errors)}")
         print(f"DEBUG: Operations detected: {operation_stats}")
-        print(f"DEBUG: Resource types found: {len(resource_types)}")
         
         # Real-time уведомление
         await websocket_manager.broadcast(json.dumps({
             "type": "upload",
             "filename": file.filename,
             "entries_count": len(entries),
-            "operations": operations
+            "parse_errors": len(parse_errors),
+            "operations": list(operation_stats.keys())
         }))
         
         return {
             "filename": file.filename,
             "entries_count": len(entries),
-            "operations": operations,
+            "parse_errors": len(parse_errors),
+            "operations": list(operation_stats.keys()),
             "resource_types": resource_types,
-            "data_source_types": data_source_types,
             "sample_entries": [e.to_dict() for e in entries[:5]],
             "debug_info": {
                 "operation_stats": operation_stats,
-                "total_operations_found": len(operations),
+                "parse_error_types": list(set(e.error_type for e in parse_errors if e.error_type)),
                 "json_blocks_found": sum(len(e.json_blocks) for e in entries)
             }
         }
@@ -485,6 +639,7 @@ async def get_entries_v2(
     resource_type: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     show_read: bool = Query(True),
+    show_parse_errors: bool = Query(True),
     limit: int = Query(100, le=1000)
 ):
     """Получение записей с улучшенной фильтрацией"""
@@ -505,6 +660,8 @@ async def get_entries_v2(
         ]
     if not show_read:
         filtered_entries = [e for e in filtered_entries if not e.read]
+    if not show_parse_errors:
+        filtered_entries = [e for e in filtered_entries if not e.parse_error]
     
     return [e.to_dict() for e in filtered_entries[:limit]]
 
@@ -513,11 +670,13 @@ async def get_statistics():
     """Расширенная статистика по логам"""
     stats = {
         'total_entries': len(uploaded_logs),
+        'parse_errors': len([e for e in uploaded_logs if e.parse_error]),
         'operations': {},
         'levels': {},
         'resource_types': {},
         'rpc_methods': {},
-        'json_blocks_count': 0
+        'json_blocks_count': 0,
+        'error_types': {}
     }
     
     for entry in uploaded_logs:
@@ -541,14 +700,30 @@ async def get_statistics():
             
         # JSON блоки
         stats['json_blocks_count'] += len(entry.json_blocks)
+        
+        # Типы ошибок парсинга
+        if entry.parse_error and entry.error_type:
+            stats['error_types'][entry.error_type] = stats['error_types'].get(entry.error_type, 0) + 1
     
     return stats
 
 @app.get("/api/v2/gantt-data")
 async def get_gantt_data():
-    """Данные для диаграммы Ганта"""
+    """Улучшенные данные для диаграммы Ганта"""
     gantt_data = gantt_generator.generate_gantt_data(uploaded_logs)
-    return gantt_data
+    
+    # Добавляем отладочную информацию
+    debug_info = {
+        "total_groups": len(gantt_data),
+        "groups_with_duration": len([g for g in gantt_data if g['duration'] > 0]),
+        "min_duration": min([g['duration'] for g in gantt_data]) if gantt_data else 0,
+        "max_duration": max([g['duration'] for g in gantt_data]) if gantt_data else 0
+    }
+    
+    return {
+        "gantt_data": gantt_data,
+        "debug_info": debug_info
+    }
 
 @app.post("/api/v2/entries/{entry_id}/read")
 async def mark_as_read(entry_id: str):
@@ -560,212 +735,35 @@ async def mark_as_read(entry_id: str):
     
     raise HTTPException(404, "Entry not found")
 
-@app.get("/api/v2/grouped-entries")
-async def get_grouped_entries():
-    """Получить записи сгруппированные по tf_req_id"""
-    groups = {}
-    
-    for entry in uploaded_logs:
-        group_id = entry.tf_req_id or "ungrouped"
-        if group_id not in groups:
-            groups[group_id] = []
-        groups[group_id].append(entry.to_dict())
-    
-    return groups
-
-# ========== EXPORT ENDPOINTS ==========
-@app.get("/api/export/csv")
-async def export_logs_csv(
-    operation: Optional[str] = Query(None),
-    level: Optional[str] = Query(None),
-    resource_type: Optional[str] = Query(None)
-):
-    """Экспорт логов в CSV"""
-    filtered_entries = uploaded_logs
-    
-    if operation and operation != 'all':
-        filtered_entries = [e for e in filtered_entries if e.operation.value == operation]
-    if level and level != 'all':
-        filtered_entries = [e for e in filtered_entries if e.level.value == level]
-    if resource_type:
-        filtered_entries = [e for e in filtered_entries if e.tf_resource_type == resource_type]
-    
-    # Создаем CSV
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Заголовки
-    writer.writerow([
-        'Timestamp', 'Level', 'Operation', 'Resource Type', 
-        'RPC Method', 'Message', 'Request ID', 'Provider', 'Module'
-    ])
-    
-    # Данные
-    for entry in filtered_entries:
-        writer.writerow([
-            entry.timestamp.isoformat(),
-            entry.level.value,
-            entry.operation.value,
-            entry.tf_resource_type or '',
-            entry.tf_rpc or '',
-            entry.message[:200],  # Обрезаем длинные сообщения
-            entry.tf_req_id or '',
-            entry.tf_provider_addr or '',
-            entry.module or ''
-        ])
-    
-    output.seek(0)
-    
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=terraform_logs_export.csv"}
-    )
-
-@app.get("/api/export/json")
-async def export_logs_json(
-    operation: Optional[str] = Query(None),
-    level: Optional[str] = Query(None),
-    resource_type: Optional[str] = Query(None)
-):
-    """Экспорт логов в JSON"""
-    filtered_entries = uploaded_logs
-    
-    if operation and operation != 'all':
-        filtered_entries = [e for e in filtered_entries if e.operation.value == operation]
-    if level and level != 'all':
-        filtered_entries = [e for e in filtered_entries if e.level.value == level]
-    if resource_type:
-        filtered_entries = [e for e in filtered_entries if e.tf_resource_type == resource_type]
-    
-    export_data = {
-        "export_info": {
-            "exported_at": datetime.now().isoformat(),
-            "total_entries": len(filtered_entries),
-            "filters": {
-                "operation": operation,
-                "level": level,
-                "resource_type": resource_type
-            }
-        },
-        "entries": [entry.to_dict() for entry in filtered_entries]
-    }
-    
-    return export_data
-
-# ========== GRPC PLUGIN DEMO ==========
-@app.get("/api/grpc/status")
-async def grpc_status():
-    """Статус gRPC плагинов (демо)"""
-    return {
-        "plugins_available": True,
-        "active_plugins": ["error_detector", "performance_analyzer"],
-        "grpc_ports": [50051, 50052],
-        "status": "ready_for_demo"
-    }
-
-@app.post("/api/grpc/process")
-async def grpc_process_demo():
-    """Демонстрация обработки через gRPC плагин"""
-    # Имитация вызова gRPC плагина
-    grpc_processor = LogProcessorServicer()
-    
-    # Подготавливаем данные для обработки
-    demo_entries = []
-    for entry in uploaded_logs[:10]:  # Обрабатываем только первые 10 для демо
-        demo_entries.append(type('MockEntry', (), {
-            'id': entry.id,
-            'message': entry.message,
-            'level': entry.level.value
-        }))
-    
-    # Имитируем вызов gRPC
-    demo_request = type('MockRequest', (), {'entries': demo_entries})()
-    result = grpc_processor.ProcessLogs(demo_request, None)
-    
-    return {
-        "processed_entries": len(result['entries']),
-        "errors_found": result['statistics']['errors_found'],
-        "plugin_used": "error_detector",
-        "status": "processed",
-        "sample_processed": result['entries'][:3] if result['entries'] else []
-    }
-
-# ========== WEB SOCKETS ==========
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket_manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            # Эхо-ответ для демонстрации
-            await websocket.send_text(f"Message received: {data}")
-    except Exception as e:
-        websocket_manager.disconnect(websocket)
-
 # ========== HEALTH AND INFO ==========
 @app.get("/api/health")
 async def health_check():
+    parse_errors = len([e for e in uploaded_logs if e.parse_error])
+    
     return {
         "status": "healthy",
-        "service": "Terraform LogViewer Pro",
-        "version": "5.0.0",
+        "service": "Terraform LogViewer Pro - Enhanced",
+        "version": "6.0.0",
         "timestamp": datetime.now().isoformat(),
         "statistics": {
             "total_logs": len(uploaded_logs),
+            "parse_errors": parse_errors,
             "operations_found": list(set(e.operation.value for e in uploaded_logs)),
             "resource_types": list(set(e.tf_resource_type for e in uploaded_logs if e.tf_resource_type))
         }
     }
 
-@app.get("/api/competition/features")
-async def competition_features():
-    """Список функций для конкурсной демонстрации"""
+@app.get("/api/debug/parser-info")
+async def debug_parser_info():
+    """Отладочная информация о парсере"""
+    error_entries = [e for e in uploaded_logs if e.parse_error]
+    
     return {
-        "features": [
-            "Эвристический парсинг логов",
-            "Автоматическое определение plan/apply операций", 
-            "Извлечение JSON из tf_http_req_body/tf_http_res_body",
-            "Группировка по tf_req_id",
-            "Цветовая подсветка уровней логирования",
-            "Пометка записей как прочитанные",
-            "Полнотекстовый поиск",
-            "Фильтрация по операциям, уровням, ресурсам",
-            "Диаграмма Ганта временных зависимостей",
-            "Экспорт в CSV/JSON",
-            "Real-time WebSocket дашборд",
-            "gRPC плагинная система",
-            "Расширенная статистика и аналитика"
-        ],
-        "criteria_covered": [
-            "Импорт и парсинг логов (20/20)",
-            "Поиск, фильтрация и визуализация (20/20)", 
-            "Расширяемость и плагины (20/20)",
-            "Визуализация хронологии (20/20)",
-            "Презентация и проработка концепции (20/20)"
-        ]
+        "total_entries": len(uploaded_logs),
+        "parse_errors": len(error_entries),
+        "error_types": list(set(e.error_type for e in error_entries if e.error_type)),
+        "sample_errors": [e.to_dict() for e in error_entries[:3]]
     }
-
-# ========== DATABASE SIMULATION ==========
-class LogDatabase:
-    """Симуляция базы данных для демонстрации"""
-    def __init__(self):
-        self.entries = []
-    
-    def save_entries(self, entries: List[TerraformLogEntry]):
-        self.entries.extend(entries)
-    
-    def get_entries(self, filters: Dict = None, limit: int = 1000):
-        filtered = self.entries
-        if filters:
-            if filters.get('operation'):
-                filtered = [e for e in filtered if e.operation.value == filters['operation']]
-            if filters.get('level'):
-                filtered = [e for e in filtered if e.level.value == filters['level']]
-        return [e.to_dict() for e in filtered[:limit]]
-
-# Инициализация "базы данных"
-db = LogDatabase()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
