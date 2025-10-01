@@ -4,10 +4,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:///terraform_logs.db
       - LOG_LEVEL=INFO
-    volumes:
-      - ./data:/app/data
+      # - DATABASE_URL=sqlite:///terraform_logs.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
