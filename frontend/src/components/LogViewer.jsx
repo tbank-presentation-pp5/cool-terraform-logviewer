@@ -126,7 +126,17 @@ const LogViewer = () => {
                                     <Tag color={getLevelColor(entry.level)}>
                                         {entry.level}
                                     </Tag>
+
                                     <span className="operation">{entry.operation}</span>
+
+                                    {entry.parse_error && entry.error_type && (
+                                      <Tag 
+                                        color='red'
+                                      >
+                                        {entry.error_type}
+                                      </Tag>
+                                    )}
+
                                     {entry.tf_req_id && (
                                         <span className="req-id">Req: {entry.tf_req_id}</span>
                                     )}
