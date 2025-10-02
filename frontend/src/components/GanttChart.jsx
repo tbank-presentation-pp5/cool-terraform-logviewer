@@ -34,9 +34,9 @@ const GanttChart = () => {
             plan: '#1890ff',
             apply: '#52c41a',
             validate: '#faad14',
-            unknown: '#d9d9d9'
+            unknown: '#222222'
         };
-        return colors[operation] || '#d9d9d9';
+        return colors[operation] || '#333333';
     };
 
     const formatDuration = (seconds) => {
@@ -156,7 +156,6 @@ const GanttChart = () => {
                 {filteredData.length > 0 ? (
                     <div style={{ marginTop: 24 }}>
                         <div style={{ 
-                            background: '#f5f5f5', 
                             padding: '20px', 
                             borderRadius: '8px',
                             overflowX: 'auto'
@@ -211,8 +210,7 @@ const GanttChart = () => {
                                             right: 0,
                                             top: '13px',
                                             height: '24px',
-                                            background: '#fff',
-                                            border: '1px solid #e8e8e8',
+                                            border: '0.5px solid #222222',
                                             borderRadius: '4px'
                                         }}>
                                             {/* Gantt Bar */}
@@ -265,7 +263,7 @@ const GanttChart = () => {
                             marginTop: 24, 
                             textAlign: 'center', 
                             padding: '16px', 
-                            background: '#fafafa', 
+                            
                             borderRadius: '6px' 
                         }}>
                             <h4>Legend:</h4>
@@ -292,7 +290,7 @@ const GanttChart = () => {
                         <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
-                                    <tr style={{ background: '#fafafa', borderBottom: '2px solid #e8e8e8' }}>
+                                    <tr>
                                         <th style={{ padding: '8px', textAlign: 'left' }}>Operation</th>
                                         <th style={{ padding: '8px', textAlign: 'left' }}>Task</th>
                                         <th style={{ padding: '8px', textAlign: 'left' }}>Start Time</th>
@@ -303,7 +301,7 @@ const GanttChart = () => {
                                 </thead>
                                 <tbody>
                                     {filteredData.map((item) => (
-                                        <tr key={item.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                        <tr key={item.id}>
                                             <td style={{ padding: '8px' }}>
                                                 <Tag color={getOperationColor(item.type)}>{item.type}</Tag>
                                             </td>

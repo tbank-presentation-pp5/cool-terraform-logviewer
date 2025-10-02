@@ -203,7 +203,7 @@ const EnhancedLogViewerWithFilters = () => {
       warn: 'orange',
       info: 'blue',
       debug: 'gray',
-      trace: 'lightgray'
+      trace: 'darkgray'
     };
     return colors[level] || 'black';
   };
@@ -415,7 +415,7 @@ const EnhancedLogViewerWithFilters = () => {
                 <Col xs={24} sm={12} key={key}>
                   <div style={{ 
                     display: 'flex', 
-                    borderBottom: '1px solid #f0f0f0',
+                    borderBottom: '0.5px solid #222222',
                     padding: '2px 0'
                   }}>
                     <div style={{ 
@@ -446,7 +446,7 @@ const EnhancedLogViewerWithFilters = () => {
     return (
       <div style={{ 
         marginTop: 8, 
-        borderTop: '1px solid #f0f0f0', 
+        borderTop: '0.5px solid #222222', 
         paddingTop: 8 
       }}>
         <Collapse 

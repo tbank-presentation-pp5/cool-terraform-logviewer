@@ -16,26 +16,21 @@ body {
 }
 
 .log-entry {
-  border: 1px solid #ddd;
   margin: 8px 0;
   padding: 12px;
   border-radius: 6px;
-  background: #fafafa;
 }
 
 .log-entry.level-error {
   border-left: 4px solid #ff4d4f;
-  background: #fff2f0;
 }
 
 .log-entry.level-warn {
   border-left: 4px solid #faad14;
-  background: #fffbe6;
 }
 
 .log-entry.level-info {
   border-left: 4px solid #1890ff;
-  background: #f0f8ff;
 }
 
 .entry-header {
@@ -56,14 +51,12 @@ body {
 }
 
 .operation {
-  background: #e6f7ff;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.8em;
 }
 
 .req-id {
-  background: #f6ffed;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.8em;
@@ -80,7 +73,6 @@ body {
 .filters select,
 .filters input {
   padding: 8px 12px;
-  border: 1px solid #d9d9d9;
   border-radius: 6px;
 }
 

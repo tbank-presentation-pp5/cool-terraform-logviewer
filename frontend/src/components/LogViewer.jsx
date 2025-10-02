@@ -56,8 +56,8 @@ const LogViewer = () => {
             error: 'red',
             warn: 'orange',
             info: 'blue',
-            debug: 'gray',
-            trace: 'lightgray'
+            debug: '#333333',
+            trace: '#222222'
         };
         return colors[level] || 'black';
     };
