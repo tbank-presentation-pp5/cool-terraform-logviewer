@@ -262,8 +262,8 @@ const EnhancedLogViewerWithFilters = () => {
     );
   };
 
-  // Рендер обычного вида - компактный как в лог-файле
-  const renderNormalView = (entries) => {
+  // Рендер лог-подобного вида (используется и для Normal и для Detailed)
+  const renderLogLikeView = (entries, mode) => {
     return (
       <div style={{ fontFamily: 'monospace', fontSize: '12px', lineHeight: '1.3' }}>
         {entries.map(entry => (
@@ -363,43 +363,8 @@ const EnhancedLogViewerWithFilters = () => {
               </Tag>
             )}
 
-            {expandedLogs.has(entry.id) && renderLogDetails(entry, 'normal')}
+            {expandedLogs.has(entry.id) && renderLogDetails(entry, mode)}
           </div>
-        ))}
-      </div>
-    );
-  };
-
-  // Рендер детального вида
-  const renderDetailedView = (entries) => {
-    return (
-      <div>
-        {entries.map(entry => (
-          <Card 
-            key={entry.id} 
-            style={{ marginBottom: 8 }}
-            title={
-              <Space>
-                <Tag color={getLevelColor(entry.level)}>{entry.level}</Tag>
-                <span>{new Date(entry.timestamp).toLocaleString()}</span>
-                <Tag color={getOperationColor(entry.operation)}>
-                  {entry.operation}
-                </Tag>
-              </Space>
-            }
-            extra={
-              <Button 
-                type="text" 
-                icon={expandedLogs.has(entry.id) ? <CaretDownOutlined /> : <CaretRightOutlined />}
-                onClick={() => toggleLogExpansion(entry.id)}
-              />
-            }
-          >
-            <div style={{ marginBottom: 16, fontFamily: 'monospace' }}>
-              {entry.message}
-            </div>
-            {expandedLogs.has(entry.id) && renderLogDetails(entry, 'detailed')}
-          </Card>
         ))}
       </div>
     );
@@ -438,38 +403,56 @@ const EnhancedLogViewerWithFilters = () => {
       });
     }
 
-    // В normal mode не показываем All Fields
+    // В Detailed mode показываем All Fields
     if (mode === 'detailed') {
       items.push({
         key: 'allFields',
         label: 'All Fields',
         children: (
-          <Row gutter={[16, 8]}>
-            {Object.entries(entry.raw_data || {}).map(([key, value]) => (
-              <Col xs={24} sm={12} md={8} key={key}>
-                <div>
-                  <strong>{key}:</strong>{' '}
-                  <span style={{ wordBreak: 'break-word' }}>
-                    {typeof value === 'string' ? value : JSON.stringify(value)}
-                  </span>
-                </div>
-              </Col>
-            ))}
-          </Row>
+          <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+            <Row gutter={[8, 4]}>
+              {Object.entries(entry.raw_data || {}).map(([key, value]) => (
+                <Col xs={24} sm={12} key={key}>
+                  <div style={{ 
+                    display: 'flex', 
+                    borderBottom: '1px solid #f0f0f0',
+                    padding: '2px 0'
+                  }}>
+                    <div style={{ 
+                      flex: '0 0 200px', 
+                      fontWeight: 'bold',
+                      fontSize: '11px',
+                      color: '#1890ff'
+                    }}>
+                      {key}:
+                    </div>
+                    <div style={{ 
+                      flex: 1,
+                      fontSize: '11px',
+                      wordBreak: 'break-word',
+                      fontFamily: 'monospace'
+                    }}>
+                      {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+                    </div>
+                  </div>
+                </Col>
+              ))}
+            </Row>
+          </div>
         ),
       });
     }
 
     return (
       <div style={{ 
-        marginTop: mode === 'normal' ? 8 : 16, 
+        marginTop: 8, 
         borderTop: '1px solid #f0f0f0', 
-        paddingTop: mode === 'normal' ? 8 : 16 
+        paddingTop: 8 
       }}>
         <Collapse 
-          defaultActiveKey={['basic']} 
+          defaultActiveKey={mode === 'detailed' ? ['basic', 'allFields'] : ['basic']}
           items={items}
-          size={mode === 'normal' ? 'small' : 'default'}
+          size="small"
         />
       </div>
     );
@@ -556,14 +539,6 @@ const EnhancedLogViewerWithFilters = () => {
                 style={{ width: '100%' }}
               />
             </Col>
-            {/* <Col xs={24} sm={4}>
-              <Checkbox
-                checked={filters.showRead}
-                onChange={e => setFilters({...filters, showRead: e.target.checked})}
-              >
-                Show Read
-              </Checkbox>
-            </Col> */}
           </Row>
         </Card>
 
@@ -644,8 +619,8 @@ const EnhancedLogViewerWithFilters = () => {
               {expandedGroups.has(groupId) && (
                 <>
                   {viewMode === 'compact' && renderCompactView(groupEntries)}
-                  {viewMode === 'normal' && renderNormalView(groupEntries)}
-                  {viewMode === 'detailed' && renderDetailedView(groupEntries)}
+                  {viewMode === 'normal' && renderLogLikeView(groupEntries, 'normal')}
+                  {viewMode === 'detailed' && renderLogLikeView(groupEntries, 'detailed')}
                 </>
               )}
             </Card>
