@@ -13,7 +13,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
-
 # ========== MODELS ==========
 class LogLevel(str, Enum):
     TRACE = "trace"
@@ -185,18 +184,12 @@ class RobustTerraformParser:
         lines = file_content.strip().split('\n')
 
         for line_num, line in enumerate(lines, 1):
-            # raw_logs
-            # Закоментировал так как данный функционал вставил parse_line_robust
-            # Потому что падал parser если "{..." и '{"1":"2}' и {"1":"2",
-            # raw_uploaded_logs.append(json.loads(line)) # <---
             if line.strip():
                 entry = self.parse_line_robust(line, line_num, filename)
                 if entry:
                     entries.append(entry)
-                    # Добавляем в raw_uploaded_logs только если это dict
                     if hasattr(entry, 'raw_data') and isinstance(entry.raw_data, dict):
                         raw_uploaded_logs.append(entry.raw_data)
-
 
         return self._enhance_with_relationships(entries)
 
@@ -260,12 +253,10 @@ class RobustTerraformParser:
 
     def _create_entry_from_data(self, data: Dict, line_num: int, filename: str, original_line: str,
                                 parse_error: bool = False, error_type: str = None) -> TerraformLogEntry:
-        # Обработка timestamp: используем предыдущий валидный, если текущий отсутствует
         timestamp = self._heuristic_parse_timestamp(data, original_line)
         if timestamp:
-            self.last_valid_timestamp = timestamp  # Обновляем последний валидный timestamp
+            self.last_valid_timestamp = timestamp
         else:
-            # Если timestamp не найден, используем последний валидный
             timestamp = self.last_valid_timestamp or datetime.now()
 
         level = self._heuristic_detect_level(data, original_line)
@@ -273,25 +264,6 @@ class RobustTerraformParser:
         tf_req_id = self._heuristic_find_req_id(data, original_line)
         json_blocks = self._extract_json_blocks(data)
 
-        # return TerraformLogEntry(
-        #     id=f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(original_line.encode()).hexdigest()[:8]}",
-        #     timestamp=timestamp,
-        #     level=level,
-        #     message=data.get('@message', data.get('message', original_line[:200])),
-        #     module=data.get('@module', data.get('module')),
-        #     tf_req_id=tf_req_id,
-        #     tf_resource_type=data.get('tf_resource_type'),
-        #     tf_data_source_type=data.get('tf_data_source_type'),
-        #     tf_rpc=data.get('tf_rpc'),
-        #     tf_provider_addr=data.get('tf_provider_addr'),
-        #     operation=operation,
-        #     raw_data=data,
-        #     json_blocks=json_blocks,
-        #     parse_error=parse_error,
-        #     error_type=error_type
-        # )
-
-        # Базовые данные
         entry_data = {
             'id': f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(original_line.encode()).hexdigest()[:8]}",
             'timestamp': timestamp,
@@ -310,12 +282,9 @@ class RobustTerraformParser:
             'error_type': error_type
         }
 
-        # навсякий сделаю копию в случае если падаем юзаем
         entry_data2 = entry_data.copy()
 
-        # Автоматическое заполнение всех полей модели из сырых данных
         field_mappings = {
-            # Прямые маппинги
             'caller': ['caller', '@caller'],
             'Accept': ['Accept'],
             'Accept_Encoding': ['Accept-Encoding', 'Accept_Encoding'],
@@ -389,14 +358,12 @@ class RobustTerraformParser:
             'version': ['version']
         }
 
-        # Заполняем поля модели из сырых данных
         for model_field, source_fields in field_mappings.items():
             for source_field in source_fields:
                 if source_field in data:
                     entry_data[model_field] = data[source_field]
                     break
 
-        # return TerraformLogEntry(**entry_data)
         try:
             return TerraformLogEntry(**entry_data)
         except Exception as e:
@@ -404,17 +371,13 @@ class RobustTerraformParser:
             print(f"Entry data keys: {entry_data.keys()}")
             for key, value in entry_data.items():
                 print(f"  {key}: {value} (type: {type(value)})")
-            # заполнем копией без доп параметров.
             return TerraformLogEntry(**entry_data2)
 
     def _create_error_entry(self, line: str, line_num: int, filename: str, error: str) -> TerraformLogEntry:
-        # timestamp = self._extract_timestamp_from_line(line) or datetime.now()
-        # Обработка timestamp: используем предыдущий валидный, если текущий отсутствует
         timestamp = self._extract_timestamp_from_line(line)
         if timestamp:
-            self.last_valid_timestamp = timestamp  # Обновляем последний валидный timestamp
+            self.last_valid_timestamp = timestamp
         else:
-            # Если timestamp не найден, используем последний валидный
             timestamp = self.last_valid_timestamp or datetime.now()
 
         return TerraformLogEntry(
@@ -686,8 +649,33 @@ class WebSocketManager:
 # ========== FASTAPI APP ==========
 app = FastAPI(
     title="Terraform LogViewer Pro - Competition Edition",
-    description="Professional Terraform log analysis with robust parsing",
-    version="7.0.0"
+    description="""Professional Terraform log analysis with robust parsing.
+    
+## Features
+- Upload and parse Terraform JSON logs
+- Filter and search through log entries
+- Generate Gantt charts for request flows
+- Real-time WebSocket updates
+- Export data in JSON and CSV formats
+- Full Swagger documentation
+    
+## API Endpoints
+All endpoints are prefixed with `/api/v2/` for versioning.
+    
+## WebSocket
+Connect to `/ws` for real-time updates.""",
+    version="7.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    contact={
+        "name": "API Support",
+        "url": "http://localhost:8000/docs",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    }
 )
 
 app.add_middleware(
@@ -706,8 +694,22 @@ raw_uploaded_logs: List[dict] = []
 
 
 # ========== ENDPOINTS ==========
-@app.post("/api/v2/upload")
+@app.post(
+    "/api/v2/upload",
+    summary="Upload Terraform logs",
+    description="Upload and parse Terraform JSON log files",
+    tags=["Upload"]
+)
 async def upload_logs_v2(file: UploadFile = File(...)):
+    """
+    Upload a Terraform log file for analysis.
+    
+    Supports:
+    - JSON log files (.json)
+    - Text log files (.log, .txt)
+    
+    Returns parsing statistics and sample entries.
+    """
     if not file.filename.endswith(('.json', '.log', '.txt')):
         raise HTTPException(400, "Only JSON, log and text files supported")
 
@@ -743,16 +745,31 @@ async def upload_logs_v2(file: UploadFile = File(...)):
         raise HTTPException(500, f"Processing failed: {str(e)}")
 
 
-@app.get("/api/v2/entries")
+@app.get(
+    "/api/v2/entries",
+    summary="Get log entries",
+    description="Retrieve filtered log entries with various query parameters",
+    tags=["Entries"]
+)
 async def get_entries_v2(
-        operation: Optional[str] = None,
-        level: Optional[str] = None,
-        resource_type: Optional[str] = None,
-        search: Optional[str] = None,
-        show_read: bool = True,
-        show_parse_errors: bool = True,
-        # limit: int = Query(100, le=99999999999)
+        operation: Optional[str] = Query(None, description="Filter by operation type"),
+        level: Optional[str] = Query(None, description="Filter by log level"),
+        resource_type: Optional[str] = Query(None, description="Filter by resource type"),
+        search: Optional[str] = Query(None, description="Search in message and RPC fields"),
+        show_read: bool = Query(True, description="Include read entries"),
+        show_parse_errors: bool = Query(True, description="Include parse errors")
 ):
+    """
+    Get log entries with advanced filtering.
+    
+    Parameters:
+    - operation: Filter by operation type (plan, apply, validate, unknown)
+    - level: Filter by log level (trace, debug, info, warn, error)
+    - resource_type: Filter by specific resource type
+    - search: Search term in message and RPC fields
+    - show_read: Include/exclude read entries
+    - show_parse_errors: Include/exclude parse errors
+    """
     filtered = uploaded_logs
     if operation and operation != 'all':
         filtered = [e for e in filtered if e.operation.value == operation]
@@ -768,41 +785,58 @@ async def get_entries_v2(
     if not show_parse_errors:
         filtered = [e for e in filtered if not e.parse_error]
 
-    # return [e.to_dict() for e in filtered[:limit]]
     return [e.to_dict() for e in filtered]
 
 
-@app.get("/api/v2/filter/keys")
+@app.get(
+    "/api/v2/filter/keys",
+    summary="Get filter keys",
+    description="Get all unique field keys available for filtering",
+    tags=["Filter"]
+)
 async def get_logs_keys():
+    """Return all unique field keys from raw uploaded logs."""
     return sorted(set().union(*raw_uploaded_logs))
 
 
-# enh - Enhanced, другой filter не стал трогать
-# чтоб не нарушать совместимость
-@app.get("/api/v2/filter_enh/keys")
-async def get_logs_keys():
-    """Возвращает все уникальные поля из загруженных логов (и из сырых, и из парсированных)"""
+@app.get(
+    "/api/v2/filter_enh/keys",
+    summary="Get enhanced filter keys",
+    description="Get all unique non-null fields from both raw and parsed logs",
+    tags=["Filter"]
+)
+async def get_logs_keys_enh():
+    """Return all unique non-null fields from both raw and parsed logs."""
     all_non_null_fields = set()
     
-    # Поля из сырых логов (только словари)
     for log in raw_uploaded_logs:
         if isinstance(log, dict):
             for key, value in log.items():
-                if value is not None:  # Исключаем null значения
+                if value is not None:
                     all_non_null_fields.add(key)
     
-    # Поля из парсированных логов (через модель)
     for entry in uploaded_logs:
         entry_dict = entry.model_dump()
         for key, value in entry_dict.items():
-            if value is not None:  # Исключаем null значения
+            if value is not None:
                 all_non_null_fields.add(key)
     
     return sorted(all_non_null_fields)
 
 
-@app.post("/api/v2/filter")
+@app.post(
+    "/api/v2/filter",
+    summary="Filter raw logs",
+    description="Filter raw logs using field-value pairs",
+    tags=["Filter"]
+)
 async def filter_raw_logs(data: Dict[str, str]):
+    """
+    Filter raw logs with exact field matching.
+    
+    Request body should be a JSON object with field-value pairs to match.
+    Only logs containing all specified field-value pairs will be returned.
+    """
     logs = raw_uploaded_logs
 
     def filter_local(log_row: Dict[str, str]) -> bool:
@@ -819,30 +853,37 @@ async def filter_raw_logs(data: Dict[str, str]):
     return list(filter(filter_local, logs))
 
 
-@app.post("/api/v2/filter_enh")
-async def filter_raw_logs(data: Dict[str, str]):
-    """Фильтрация логов с приведением к нашей модели"""
+@app.post(
+    "/api/v2/filter_enh",
+    summary="Enhanced filter",
+    description="Filter logs with enhanced matching using both raw and parsed data",
+    tags=["Filter"]
+)
+async def filter_raw_logs_enh(data: Dict[str, str]):
+    """
+    Enhanced filtering that searches both raw logs and parsed model fields.
+    
+    Supports:
+    - Field matching in raw log data
+    - Special fields: level, operation, message, module
+    - Case-insensitive substring matching
+    """
     if not data:
-        # Если фильтров нет, возвращаем все парсированные логи
         return [entry.to_dict() for entry in uploaded_logs]
     
-    # Собираем индексы сырых логов, которые подходят под фильтр
     matching_indices = []
     
     for idx, raw_log in enumerate(raw_uploaded_logs):
         matches_all_filters = True
         
         for field, filter_value in data.items():
-            # Проверяем поле в сыром логе
             if field in raw_log:
                 field_value = str(raw_log[field])
                 if filter_value.lower() not in field_value.lower():
                     matches_all_filters = False
                     break
-            # Если поля нет в сыром логе, проверяем в парсированной модели
             elif idx < len(uploaded_logs):
                 entry = uploaded_logs[idx]
-                # Проверяем специальные поля модели
                 if field == 'level' and entry.level.value.lower() != filter_value.lower():
                     matches_all_filters = False
                     break
@@ -855,14 +896,12 @@ async def filter_raw_logs(data: Dict[str, str]):
                 elif field == 'module' and entry.module and filter_value.lower() not in entry.module.lower():
                     matches_all_filters = False
                     break
-                # Проверяем остальные поля модели
                 elif hasattr(entry, field):
                     field_value = str(getattr(entry, field) or '')
                     if filter_value.lower() not in field_value.lower():
                         matches_all_filters = False
                         break
                 else:
-                    # Поле не найдено ни в сырых данных, ни в модели
                     matches_all_filters = False
                     break
             else:
@@ -872,7 +911,6 @@ async def filter_raw_logs(data: Dict[str, str]):
         if matches_all_filters:
             matching_indices.append(idx)
     
-    # Возвращаем соответствующие парсированные логи
     filtered_entries = []
     for idx in matching_indices:
         if idx < len(uploaded_logs):
@@ -881,8 +919,25 @@ async def filter_raw_logs(data: Dict[str, str]):
     return filtered_entries
 
 
-@app.get("/api/v2/statistics")
+@app.get(
+    "/api/v2/statistics",
+    summary="Get statistics",
+    description="Get comprehensive statistics about parsed logs",
+    tags=["Statistics"]
+)
 async def get_statistics():
+    """
+    Return detailed statistics about the uploaded logs.
+    
+    Includes:
+    - Total entries and parse errors
+    - Operation type distribution
+    - Log level distribution
+    - Resource type statistics
+    - RPC method usage
+    - JSON blocks count
+    - Error type breakdown
+    """
     stats = {
         'total_entries': len(uploaded_logs),
         'parse_errors': len([e for e in uploaded_logs if e.parse_error]),
@@ -915,14 +970,26 @@ async def get_statistics():
     return stats
 
 
-@app.get("/api/v2/gantt-data")
+@app.get(
+    "/api/v2/gantt-data",
+    summary="Get Gantt chart data",
+    description="Generate Gantt chart data for request flow visualization",
+    tags=["Visualization"]
+)
 async def get_gantt_data():
+    """Generate Gantt chart data showing request flows and durations."""
     gantt_data = gantt_generator.generate_gantt_data(uploaded_logs)
     return {"gantt_data": gantt_data}
 
 
-@app.post("/api/v2/entries/{entry_id}/read")
+@app.post(
+    "/api/v2/entries/{entry_id}/read",
+    summary="Mark entry as read",
+    description="Mark a specific log entry as read",
+    tags=["Entries"]
+)
 async def mark_as_read(entry_id: str):
+    """Mark a log entry as read by its ID."""
     for entry in uploaded_logs:
         if entry.id == entry_id:
             entry.read = True
@@ -931,12 +998,18 @@ async def mark_as_read(entry_id: str):
 
 
 # ========== EXPORT ENDPOINTS ==========
-@app.get("/api/export/json")
+@app.get(
+    "/api/export/json",
+    summary="Export as JSON",
+    description="Export filtered logs as JSON",
+    tags=["Export"]
+)
 async def export_json(
-        operation: Optional[str] = None,
-        level: Optional[str] = None,
-        resource_type: Optional[str] = None
+        operation: Optional[str] = Query(None, description="Filter by operation type"),
+        level: Optional[str] = Query(None, description="Filter by log level"),
+        resource_type: Optional[str] = Query(None, description="Filter by resource type")
 ):
+    """Export filtered log entries in JSON format."""
     filtered = uploaded_logs
     if operation:
         filtered = [e for e in filtered if e.operation.value == operation]
@@ -948,12 +1021,18 @@ async def export_json(
     return [e.to_dict() for e in filtered]
 
 
-@app.get("/api/export/csv")
+@app.get(
+    "/api/export/csv",
+    summary="Export as CSV",
+    description="Export filtered logs as CSV file",
+    tags=["Export"]
+)
 async def export_csv(
-        operation: Optional[str] = None,
-        level: Optional[str] = None,
-        resource_type: Optional[str] = None
+        operation: Optional[str] = Query(None, description="Filter by operation type"),
+        level: Optional[str] = Query(None, description="Filter by log level"),
+        resource_type: Optional[str] = Query(None, description="Filter by resource type")
 ):
+    """Export filtered log entries as CSV download."""
     filtered = uploaded_logs
     if operation:
         filtered = [e for e in filtered if e.operation.value == operation]
@@ -988,13 +1067,25 @@ async def export_csv(
 
 
 # ========== GRPC DEMO ENDPOINTS ==========
-@app.get("/api/grpc/status")
+@app.get(
+    "/api/grpc/status",
+    summary="gRPC status",
+    description="Check gRPC plugin system status",
+    tags=["gRPC"]
+)
 async def grpc_status():
+    """Check the status of the gRPC plugin system."""
     return {"status": "gRPC plugin system operational", "plugins": ["error_detector", "performance_analyzer"]}
 
 
-@app.post("/api/grpc/process")
+@app.post(
+    "/api/grpc/process",
+    summary="Process with gRPC",
+    description="Process logs using gRPC plugins",
+    tags=["gRPC"]
+)
 async def grpc_process():
+    """Process logs through gRPC plugins and return results."""
     error_count = len([e for e in uploaded_logs if e.level == LogLevel.ERROR])
     return {"processed_entries": len(uploaded_logs), "errors_found": error_count}
 
@@ -1002,6 +1093,14 @@ async def grpc_process():
 # ========== WEBSOCKET ==========
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time updates.
+    
+    Connect to receive real-time notifications about:
+    - New log uploads
+    - Processing status
+    - System events
+    """
     await websocket_manager.connect(websocket)
     try:
         while True:
@@ -1011,8 +1110,14 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_manager.disconnect(websocket)
 
 
-@app.get("/api/health")
+@app.get(
+    "/api/health",
+    summary="Health check",
+    description="Check API health status",
+    tags=["System"]
+)
 async def health_check():
+    """Check the health status of the API service."""
     return {
         "status": "healthy",
         "service": "Terraform LogViewer Pro",
@@ -1022,6 +1127,22 @@ async def health_check():
             "total_logs": len(uploaded_logs),
             "parse_errors": len([e for e in uploaded_logs if e.parse_error])
         }
+    }
+
+
+@app.get(
+    "/",
+    summary="Root endpoint",
+    description="API root with basic information",
+    tags=["System"]
+)
+async def root():
+    """API root endpoint with basic information and links to documentation."""
+    return {
+        "message": "Terraform LogViewer Pro API",
+        "version": "7.0.0",
+        "docs": "/docs",
+        "health": "/api/health"
     }
 
 
