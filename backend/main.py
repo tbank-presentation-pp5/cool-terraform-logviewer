@@ -36,11 +36,81 @@ class TerraformLogEntry(BaseModel):
     level: LogLevel
     message: str
     module: Optional[str] = None
+    
+    # Все требуемые поля
+    caller: Optional[str] = None
+    Accept: Optional[str] = None
+    Accept_Encoding: Optional[str] = None
+    Access_Control_Expose_Headers: Optional[str] = None
+    Cache_Control: Optional[str] = None
+    Connection: Optional[str] = None
+    Content_Length: Optional[str] = None
+    Content_Security_Policy: Optional[str] = None
+    Content_Type: Optional[str] = None
+    Date: Optional[str] = None
+    EXTRA_VALUE_AT_END: Optional[str] = None
+    Etag: Optional[str] = None
+    Expires: Optional[str] = None
+    Host: Optional[str] = None
+    Keep_Alive: Optional[str] = None
+    Permissions_Policy: Optional[str] = None
+    Pragma: Optional[str] = None
+    Referrer_Policy: Optional[str] = None
+    Server: Optional[str] = None
+    Set_Cookie: Optional[str] = None
+    Strict_Transport_Security: Optional[str] = None
+    User_Agent: Optional[str] = None
+    Vary: Optional[str] = None
+    Via: Optional[str] = None
+    X_Content_Type_Options: Optional[str] = None
+    X_Frame_Options: Optional[str] = None
+    X_Kong_Proxy_Latency: Optional[str] = None
+    X_Kong_Upstream_Latency: Optional[str] = None
+    X_Request_Id: Optional[str] = None
+    X_Runtime: Optional[str] = None
+    address: Optional[str] = None
+    args: Optional[str] = None
+    channel: Optional[str] = None
+    description: Optional[str] = None
+    diagnostic_attribute: Optional[str] = None
+    diagnostic_detail: Optional[str] = None
+    diagnostic_error_count: Optional[str] = None
+    diagnostic_severity: Optional[str] = None
+    diagnostic_summary: Optional[str] = None
+    diagnostic_warning_count: Optional[str] = None
+    err: Optional[str] = None
+    len: Optional[str] = None
+    network: Optional[str] = None
+    path: Optional[str] = None
+    pid: Optional[str] = None
+    plugin: Optional[str] = None
+    tf_registry_stdout: Optional[str] = None
+    tf_attribute_path: Optional[str] = None
+    tf_client_capability_deferral_allowed: Optional[str] = None
+    tf_client_capability_write_only_attributes_allowed: Optional[str] = None
+    tf_data_source_type: Optional[str] = None
+    tf_http_op_type: Optional[str] = None
+    tf_http_req_body: Optional[str] = None
+    tf_http_req_method: Optional[str] = None
+    tf_http_req_uri: Optional[str] = None
+    tf_http_req_version: Optional[str] = None
+    tf_http_res_body: Optional[str] = None
+    tf_http_res_status_code: Optional[str] = None
+    tf_http_res_status_reason: Optional[str] = None
+    tf_http_res_version: Optional[str] = None
+    tf_http_trans_id: Optional[str] = None
+    tf_proto_version: Optional[str] = None
+    tf_provider_addr: Optional[str] = None
+    tf_req_duration_ms: Optional[str] = None
     tf_req_id: Optional[str] = None
     tf_resource_type: Optional[str] = None
-    tf_data_source_type: Optional[str] = None
     tf_rpc: Optional[str] = None
-    tf_provider_addr: Optional[str] = None
+    tf_server_capability_get_provider_schema_optional: Optional[str] = None
+    tf_server_capability_move_resource_state: Optional[str] = None
+    tf_server_capability_plan_destroy: Optional[str] = None
+    version: Optional[str] = None
+    
+    # Существующие технические поля
     operation: OperationType = OperationType.UNKNOWN
     raw_data: Dict[str, Any] = Field(default_factory=dict)
     parent_req_id: Optional[str] = None
@@ -519,7 +589,7 @@ async def get_entries_v2(
         search: Optional[str] = None,
         show_read: bool = True,
         show_parse_errors: bool = True,
-        limit: int = Query(100, le=1000)
+        # limit: int = Query(100, le=99999999999)
 ):
     filtered = uploaded_logs
     if operation and operation != 'all':
@@ -536,12 +606,35 @@ async def get_entries_v2(
     if not show_parse_errors:
         filtered = [e for e in filtered if not e.parse_error]
 
-    return [e.to_dict() for e in filtered[:limit]]
+    # return [e.to_dict() for e in filtered[:limit]]
+    return [e.to_dict() for e in filtered]
 
 
 @app.get("/api/v2/filter/keys")
 async def get_logs_keys():
     return sorted(set().union(*raw_uploaded_logs))
+
+
+# enh - Enhanced, другой filter не стал трогать
+# чтоб не нарушать совместимость
+@app.get("/api/v2/filter_enh/keys")
+async def get_logs_keys():
+    """Возвращает все уникальные поля из загруженных логов (и из сырых, и из парсированных)"""
+    all_fields = set()
+    
+    # Поля из сырых логов
+    for log in raw_uploaded_logs:
+        all_fields.update(log.keys())
+    
+    # Поля из парсированных логов (через модель)
+    for entry in uploaded_logs:
+        # Добавляем поля из модели
+        all_fields.update(entry.raw_data.keys())
+        # Добавляем стандартные поля модели
+        # all_fields.update(['id', 'timestamp', 'level', 'message', 'module', 'operation'])
+        # похуй лучшее без дубликаций прям 
+    
+    return sorted(all_fields)
 
 
 @app.post("/api/v2/filter")
@@ -560,6 +653,68 @@ async def filter_raw_logs(data: Dict[str, str]):
         return True
 
     return list(filter(filter_local, logs))
+
+
+@app.post("/api/v2/filter_enh")
+async def filter_raw_logs(data: Dict[str, str]):
+    """Фильтрация логов с приведением к нашей модели"""
+    if not data:
+        # Если фильтров нет, возвращаем все парсированные логи
+        return [entry.to_dict() for entry in uploaded_logs]
+    
+    # Собираем индексы сырых логов, которые подходят под фильтр
+    matching_indices = []
+    
+    for idx, raw_log in enumerate(raw_uploaded_logs):
+        matches_all_filters = True
+        
+        for field, filter_value in data.items():
+            # Проверяем поле в сыром логе
+            if field in raw_log:
+                field_value = str(raw_log[field])
+                if filter_value.lower() not in field_value.lower():
+                    matches_all_filters = False
+                    break
+            # Если поля нет в сыром логе, проверяем в парсированной модели
+            elif idx < len(uploaded_logs):
+                entry = uploaded_logs[idx]
+                # Проверяем специальные поля модели
+                if field == 'level' and entry.level.value.lower() != filter_value.lower():
+                    matches_all_filters = False
+                    break
+                elif field == 'operation' and entry.operation.value.lower() != filter_value.lower():
+                    matches_all_filters = False
+                    break
+                elif field == 'message' and filter_value.lower() not in entry.message.lower():
+                    matches_all_filters = False
+                    break
+                elif field == 'module' and entry.module and filter_value.lower() not in entry.module.lower():
+                    matches_all_filters = False
+                    break
+                # Проверяем остальные поля модели
+                elif hasattr(entry, field):
+                    field_value = str(getattr(entry, field) or '')
+                    if filter_value.lower() not in field_value.lower():
+                        matches_all_filters = False
+                        break
+                else:
+                    # Поле не найдено ни в сырых данных, ни в модели
+                    matches_all_filters = False
+                    break
+            else:
+                matches_all_filters = False
+                break
+        
+        if matches_all_filters:
+            matching_indices.append(idx)
+    
+    # Возвращаем соответствующие парсированные логи
+    filtered_entries = []
+    for idx in matching_indices:
+        if idx < len(uploaded_logs):
+            filtered_entries.append(uploaded_logs[idx].to_dict())
+    
+    return filtered_entries
 
 
 @app.get("/api/v2/statistics")

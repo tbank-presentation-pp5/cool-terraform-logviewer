@@ -9,7 +9,7 @@ import {
     ExportOutlined, AlignLeftOutlined
 } from '@ant-design/icons';
 import LogUploader from './components/LogUploader';
-import EnhancedLogViewer from './components/EnhancedLogViewer';
+import EnhancedLogViewerWithFilters from './components/EnhancedLogViewer';
 import LogViewer from './components/LogViewer';
 import RealTimeDashboard from './components/RealTimeDashboard';
 import CompetitionDashboard from './components/CompetitionDashboard';
@@ -93,7 +93,7 @@ class App extends React.Component {
             case 'old_viewer':
                 return <LogViewer logs={logs}/>;
             case 'viewer':
-                return <EnhancedLogViewer logs={logs}/>;
+                return <EnhancedLogViewerWithFilters logs={logs}/>;
             case 'raw_viewer':
                 return <RawLogViewer/>;
             case 'gantt':

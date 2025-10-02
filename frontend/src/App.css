@@ -143,3 +143,54 @@
 .real-time-dashboard {
   padding: 20px;
 }
+
+.log-entry {
+  border: 1px solid #ddd;
+  margin: 8px 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: #fafafa;
+  transition: all 0.3s ease;
+}
+
+.log-entry:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.log-entry.level-error {
+  border-left: 4px solid #ff4d4f;
+  background: #fff2f0;
+}
+
+.log-entry.level-warn {
+  border-left: 4px solid #faad14;
+  background: #fffbe6;
+}
+
+.log-entry.level-info {
+  border-left: 4px solid #1890ff;
+  background: #f0f8ff;
+}
+
+.log-entry.level-debug {
+  border-left: 4px solid #722ed1;
+  background: #f9f0ff;
+}
+
+.log-entry.level-trace {
+  border-left: 4px solid #52c41a;
+  background: #f6ffed;
+}
+
+.compact-log-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .compact-log-grid {
+    grid-template-columns: 1fr;
+  }
+}
