@@ -202,8 +202,8 @@ const EnhancedLogViewerWithFilters = () => {
       error: 'red',
       warn: 'orange',
       info: 'blue',
-      debug: 'gray',
-      trace: 'darkgray'
+      debug: '#333333',
+      trace: '#222222'
     };
     return colors[level] || 'black';
   };
@@ -213,9 +213,9 @@ const EnhancedLogViewerWithFilters = () => {
       plan: 'blue',
       apply: 'green',
       validate: 'orange',
-      unknown: 'gray'
+      unknown: '#333333'
     };
-    return colors[operation] || 'gray';
+    return colors[operation] || '#333333';
   };
 
   // Рендер компактного вида
