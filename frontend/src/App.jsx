@@ -109,40 +109,10 @@ class App extends React.Component {
         }
     }
 
-  render() {
-    return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Sider collapsible>
-          <div className="logo">
-            <Title level={5} style={{ color: 'white', textAlign: 'center', padding: '3px' }}>
-              TF LogViewer
-            </Title>
-          </div>
-          <Menu
-            theme="dark"
-            defaultSelectedKeys={['upload']}
-            selectedKeys={[this.state.selectedKey]}
-            onClick={this.handleMenuClick}
-            items={this.menuItems}
-          />
-        </Sider>
-        <Layout>
-          <Header style={{ background: '#fff', padding: '0 24px' }}>
-            <Title level={2} style={{ margin: 0 }}>
-              Terraform LogViewer Pro - Competition Edition
-            </Title>
-          </Header>
-          <Content style={{ margin: '24px 16px', padding: 24, background: '#fff' }}>
-            {this.renderContent()}
-          </Content>
-        </Layout>
-      </Layout>
-    );
-  }
     render() {
         return (
             <Layout style={{minHeight: '100vh'}}>
-                <Sider collapsible>
+                <Sider collapsible >
                     <div className="logo">
                         <Title level={5} style={{color: 'white', textAlign: 'center', padding: '3px'}}>
                             TF LogViewer
@@ -157,12 +127,12 @@ class App extends React.Component {
                     />
                 </Sider>
                 <Layout>
-                    <Header style={{background: '#fff', padding: '0 24px'}}>
+                    <Header style={{background: '#f5f5f5', padding: '0 24px'}}>
                         <Title level={2} style={{margin: 0}}>
                             Terraform LogViewer Pro - Competition Edition
                         </Title>
                     </Header>
-                    <Content style={{margin: '24px 16px', padding: 24, background: '#fff'}}>
+                    <Content style={{margin: '24px 16px', padding: 24, background: '#f5f5f5'}}>
                         {this.renderContent()}
                     </Content>
                 </Layout>
