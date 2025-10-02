@@ -313,6 +313,20 @@ const EnhancedLogViewerWithFilters = () => {
                 >
                   {entry.operation}
                 </Tag>
+                {entry.parse_error && entry.error_type && (
+                  <Tag 
+                    color='red'
+                    style={{ 
+                      margin: 0, 
+                      fontSize: '10px', 
+                      padding: '0 4px',
+                      height: '16px',
+                      lineHeight: '16px'
+                    }}
+                  >
+                    {entry.error_type}
+                  </Tag>
+                )}
                 <Button 
                   type="text" 
                   size="small"
