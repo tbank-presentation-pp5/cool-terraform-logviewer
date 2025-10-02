@@ -10,7 +10,6 @@
 .site-layout .site-layout-background {
   background: #fff;
 }
-
 .ant-layout-header {
   display: flex;
   align-items: center;
@@ -101,7 +100,8 @@
   flex-wrap: wrap;
 }
 
-.filters select, .filters input {
+.filters select,
+.filters input {
   padding: 8px 12px;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
@@ -126,7 +126,10 @@
   margin-bottom: 24px;
 }
 
-.quality-card, .errors-card, .features-card, .performance-card {
+.quality-card,
+.errors-card,
+.features-card,
+.performance-card {
   margin-bottom: 24px;
 }
 
