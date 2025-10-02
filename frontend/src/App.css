@@ -5,11 +5,6 @@
 .logo {
   height: 32px;
   margin: 16px;
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.site-layout .site-layout-background {
-  background: #fff;
 }
 
 .ant-layout-header {
@@ -41,26 +36,22 @@
 }
 
 .log-entry {
-  border: 1px solid #ddd;
+  border: 0.5px solid #222222;
   margin: 8px 0;
   padding: 12px;
   border-radius: 6px;
-  background: #fafafa;
 }
 
 .log-entry.level-error {
   border-left: 4px solid #ff4d4f;
-  background: #fff2f0;
 }
 
 .log-entry.level-warn {
   border-left: 4px solid #faad14;
-  background: #fffbe6;
 }
 
 .log-entry.level-info {
   border-left: 4px solid #1890ff;
-  background: #f0f8ff;
 }
 
 .entry-header {
@@ -81,14 +72,12 @@
 }
 
 .operation {
-  background: #e6f7ff;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.8em;
 }
 
 .req-id {
-  background: #f6ffed;
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 0.8em;
@@ -102,14 +91,13 @@
   flex-wrap: wrap;
 }
 
-.filters select, .filters input {
+.filters select,
+.filters input {
   padding: 8px 12px;
-  border: 1px solid #d9d9d9;
   border-radius: 6px;
 }
 
 .statistics {
-  background: #f5f5f5;
   padding: 16px;
   border-radius: 6px;
   margin-bottom: 20px;
@@ -127,7 +115,10 @@
   margin-bottom: 24px;
 }
 
-.quality-card, .errors-card, .features-card, .performance-card {
+.quality-card,
+.errors-card,
+.features-card,
+.performance-card {
   margin-bottom: 24px;
 }
 
@@ -142,4 +133,48 @@
 
 .real-time-dashboard {
   padding: 20px;
+}
+
+.log-entry {
+  margin: 8px 0;
+  padding: 12px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.log-entry:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.log-entry.level-error {
+  border-left: 4px solid #ff4d4f;
+}
+
+.log-entry.level-warn {
+  border-left: 4px solid #faad14;
+}
+
+.log-entry.level-info {
+  border-left: 4px solid #1890ff;
+}
+
+.log-entry.level-debug {
+  border-left: 4px solid #722ed1;
+}
+
+.log-entry.level-trace {
+  border-left: 4px solid #52c41a;
+}
+
+.compact-log-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .compact-log-grid {
+    grid-template-columns: 1fr;
+  }
 }

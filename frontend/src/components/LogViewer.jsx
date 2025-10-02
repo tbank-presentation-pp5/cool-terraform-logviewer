@@ -56,8 +56,8 @@ const LogViewer = () => {
             error: 'red',
             warn: 'orange',
             info: 'blue',
-            debug: 'gray',
-            trace: 'lightgray'
+            debug: '#333333',
+            trace: '#222222'
         };
         return colors[level] || 'black';
     };
@@ -68,7 +68,6 @@ const LogViewer = () => {
                 {/* Фильтры */}
                 <div className="filters">
                     <Select 
-                        value={filters.operation} 
                         onChange={value => setFilters({...filters, operation: value})}
                         placeholder="Operation"
                         style={{ width: 150 }}
@@ -77,10 +76,10 @@ const LogViewer = () => {
                         <Option value="plan">Plan</Option>
                         <Option value="apply">Apply</Option>
                         <Option value="validate">Validate</Option>
+                        <Option value="unknown">Unknown</Option>
                     </Select>
 
                     <Select 
-                        value={filters.level}
                         onChange={value => setFilters({...filters, level: value})}
                         placeholder="Log Level"
                         style={{ width: 150 }}
@@ -127,7 +126,17 @@ const LogViewer = () => {
                                     <Tag color={getLevelColor(entry.level)}>
                                         {entry.level}
                                     </Tag>
+
                                     <span className="operation">{entry.operation}</span>
+
+                                    {entry.parse_error && entry.error_type && (
+                                      <Tag 
+                                        color='red'
+                                      >
+                                        {entry.error_type}
+                                      </Tag>
+                                    )}
+
                                     {entry.tf_req_id && (
                                         <span className="req-id">Req: {entry.tf_req_id}</span>
                                     )}

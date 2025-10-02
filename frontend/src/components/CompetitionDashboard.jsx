@@ -267,7 +267,7 @@ const CompetitionDashboard = () => {
                                         <Tag color={
                                             level === 'error' ? 'red' : 
                                             level === 'warn' ? 'orange' : 
-                                            level === 'info' ? 'blue' : 'gray'
+                                            level === 'info' ? 'blue' : '#333333'
                                         }>
                                             {level}
                                         </Tag>

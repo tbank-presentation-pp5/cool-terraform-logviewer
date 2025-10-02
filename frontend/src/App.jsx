@@ -1,31 +1,34 @@
-import React from 'react';
-import { Layout, Menu, Typography } from 'antd';
+import React from "react";
+import { Layout, Menu, Typography, ConfigProvider as CFGPR, theme } from "antd";
 import {
   UploadOutlined,
   DashboardOutlined,
   BarChartOutlined,
   TrophyOutlined,
   LineChartOutlined,
-  ExportOutlined
-} from '@ant-design/icons';
-import LogUploader from './components/LogUploader';
-import EnhancedLogViewer from './components/EnhancedLogViewer';
-import LogViewer from './components/LogViewer';
-import RealTimeDashboard from './components/RealTimeDashboard';
-import CompetitionDashboard from './components/CompetitionDashboard';
-import GanttChart from './components/GanttChart';
-import ExportPanel from './components/ExportPanel';
-import './App.css';
+  ExportOutlined,
+  AlignLeftOutlined,
+} from "@ant-design/icons";
+import LogUploader from "./components/LogUploader";
+import EnhancedLogViewerWithFilters from "./components/EnhancedLogViewer";
+import LogViewer from "./components/LogViewer";
+import RealTimeDashboard from "./components/RealTimeDashboard";
+import CompetitionDashboard from "./components/CompetitionDashboard";
+import GanttChart from "./components/GanttChart";
+import ExportPanel from "./components/ExportPanel";
+import "./App.css";
+import RawLogViewer from "./components/RawLogViewer.jsx";
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
+const { darkAlgorithm } = theme;
 
 class App extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      selectedKey: 'upload',
-      logs: []
+      selectedKey: "upload",
+      logs: [],
     };
   }
 
@@ -34,47 +37,52 @@ class App extends React.Component {
   };
 
   handleLogsUpdate = (newLogs) => {
-    this.setState(prevState => ({
-      logs: [...prevState.logs, ...newLogs]
+    this.setState((prevState) => ({
+      logs: [...prevState.logs, ...newLogs],
     }));
   };
 
   // Обновленный items для Menu
   menuItems = [
     {
-      key: 'upload',
+      key: "upload",
       icon: <UploadOutlined />,
-      label: 'Upload Logs',
+      label: "Upload Logs",
     },
     {
-        key: 'old_viewer',
-        icon: <BarChartOutlined />,
-        label: 'Old Log Viewer',
-    },
-    {
-      key: 'viewer',
+      key: "old_viewer",
       icon: <BarChartOutlined />,
-      label: 'Enhanced Log Viewer',
+      label: "Old Log Viewer",
     },
     {
-      key: 'gantt',
+      key: "viewer",
+      icon: <BarChartOutlined />,
+      label: "Enhanced Log Viewer",
+    },
+    {
+      key: "raw_viewer",
+      icon: <AlignLeftOutlined />,
+      label: "Raw Log Viewer",
+    },
+    {
+      key: "gantt",
       icon: <LineChartOutlined />,
-      label: 'Gantt Chart',
+      label: "Gantt Chart",
     },
     {
-      key: 'dashboard',
+      key: "dashboard",
       icon: <DashboardOutlined />,
-      label: 'Real-time Dashboard',
+      label: "Real-time Dashboard",
     },
     {
-      key: 'competition',
+      key: "competition",
       icon: <TrophyOutlined />,
-      label: 'Competition Mode',
+      label: "Competition Mode",
     },
     {
-      key: 'export',
+      key: "export",
       icon: <ExportOutlined />,
-      label: 'Export Data',
+      label: "Export Data",
     },
   ];
 
@@ -82,19 +90,21 @@ class App extends React.Component {
     const { selectedKey, logs } = this.state;
 
     switch (selectedKey) {
-      case 'upload':
+      case "upload":
         return <LogUploader onLogsUpdate={this.handleLogsUpdate} />;
-     case 'old_viewer':
+      case "old_viewer":
         return <LogViewer logs={logs} />;
-      case 'viewer':
-        return <EnhancedLogViewer logs={logs} />;
-      case 'gantt':
+      case "viewer":
+        return <EnhancedLogViewerWithFilters logs={logs} />;
+      case "raw_viewer":
+        return <RawLogViewer />;
+      case "gantt":
         return <GanttChart />;
-      case 'dashboard':
+      case "dashboard":
         return <RealTimeDashboard />;
-      case 'competition':
+      case "competition":
         return <CompetitionDashboard />;
-      case 'export':
+      case "export":
         return <ExportPanel />;
       default:
         return <LogUploader onLogsUpdate={this.handleLogsUpdate} />;
@@ -103,32 +113,55 @@ class App extends React.Component {
 
   render() {
     return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Sider collapsible>
-          <div className="logo">
-            <Title level={5} style={{ color: 'white', textAlign: 'center', padding: '3px' }}>
-              TF LogViewer
-            </Title>
-          </div>
-          <Menu
-            theme="dark"
-            defaultSelectedKeys={['upload']}
-            selectedKeys={[this.state.selectedKey]}
-            onClick={this.handleMenuClick}
-            items={this.menuItems}  // Используем items вместо children
-          />
-        </Sider>
-        <Layout>
-          <Header style={{ background: '#fff', padding: '0 24px' }}>
-            <Title level={2} style={{ margin: 0 }}>
-              Terraform LogViewer Pro - Competition Edition
-            </Title>
-          </Header>
-          <Content style={{ margin: '24px 16px', padding: 24, background: '#fff' }}>
-            {this.renderContent()}
-          </Content>
+      <CFGPR
+        theme={{
+          algorithm: darkAlgorithm,
+          token: {
+            colorBgLayout: "#0a0a0a",
+            colorBgContainer: "#141414",
+            colorText: "rgba(255, 255, 255, 0.85)",
+          }
+        }}
+      >
+        <Layout style={{ minHeight: "100vh" }}>
+          <Sider collapsible style={{ background: "#141414" }}>
+            <div
+              className="logo"
+              style={{
+                justifyContent: "center",
+                display: "flex",
+                alignContent: "center",
+              }}
+            >
+              {/* <Title level={5} style={{ textAlign: "center", padding: "3px" }}>
+                TF LogViewer
+              </Title> */}
+              <img src="../eye.png" width={50} height={50} />
+            </div>
+            <Menu
+              defaultSelectedKeys={["upload"]}
+              selectedKeys={[this.state.selectedKey]}
+              onClick={this.handleMenuClick}
+              items={this.menuItems} // Используем items вместо children
+            />
+          </Sider>
+          <Layout>
+            <Header style={{ padding: "0 24px", background: "#141414" }}>
+              <Title level={2} style={{ margin: 0 }}>
+                Terraform LogViewer Pro - Competition Edition
+              </Title>
+            </Header>
+            <Content
+              style={{
+                margin: "24px 16px",
+                padding: 24,
+              }}
+            >
+              {this.renderContent()}
+            </Content>
+          </Layout>
         </Layout>
-      </Layout>
+      </CFGPR>
     );
   }
 }
