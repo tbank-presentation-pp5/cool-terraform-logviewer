@@ -178,6 +178,7 @@ class RobustTerraformParser:
             'PlanResourceChange': 'plan',
             'ApplyResourceChange': 'apply'
         }
+        self.last_valid_timestamp = None  # Для обработки записей без timestamp
 
     def parse_log_file(self, file_content: str, filename: str = "") -> List[TerraformLogEntry]:
         entries = []
@@ -185,12 +186,17 @@ class RobustTerraformParser:
 
         for line_num, line in enumerate(lines, 1):
             # raw_logs
-            raw_uploaded_logs.append(json.loads(line))
-            ##
+            # Закоментировал так как данный функционал вставил parse_line_robust
+            # Потому что падал parser если "{..." и '{"1":"2}' и {"1":"2",
+            # raw_uploaded_logs.append(json.loads(line)) # <---
             if line.strip():
                 entry = self.parse_line_robust(line, line_num, filename)
                 if entry:
                     entries.append(entry)
+                    # Добавляем в raw_uploaded_logs только если это dict
+                    if hasattr(entry, 'raw_data') and isinstance(entry.raw_data, dict):
+                        raw_uploaded_logs.append(entry.raw_data)
+
 
         return self._enhance_with_relationships(entries)
 
@@ -254,7 +260,14 @@ class RobustTerraformParser:
 
     def _create_entry_from_data(self, data: Dict, line_num: int, filename: str, original_line: str,
                                 parse_error: bool = False, error_type: str = None) -> TerraformLogEntry:
+        # Обработка timestamp: используем предыдущий валидный, если текущий отсутствует
         timestamp = self._heuristic_parse_timestamp(data, original_line)
+        if timestamp:
+            self.last_valid_timestamp = timestamp  # Обновляем последний валидный timestamp
+        else:
+            # Если timestamp не найден, используем последний валидный
+            timestamp = self.last_valid_timestamp or datetime.now()
+
         level = self._heuristic_detect_level(data, original_line)
         operation = self._heuristic_detect_operation(data, filename, original_line)
         tf_req_id = self._heuristic_find_req_id(data, original_line)
@@ -395,19 +408,25 @@ class RobustTerraformParser:
             return TerraformLogEntry(**entry_data2)
 
     def _create_error_entry(self, line: str, line_num: int, filename: str, error: str) -> TerraformLogEntry:
-        timestamp = self._extract_timestamp_from_line(line) or datetime.now()
+        # timestamp = self._extract_timestamp_from_line(line) or datetime.now()
+        # Обработка timestamp: используем предыдущий валидный, если текущий отсутствует
+        timestamp = self._extract_timestamp_from_line(line)
+        if timestamp:
+            self.last_valid_timestamp = timestamp  # Обновляем последний валидный timestamp
+        else:
+            # Если timestamp не найден, используем последний валидный
+            timestamp = self.last_valid_timestamp or datetime.now()
 
         return TerraformLogEntry(
             id=f"error-{timestamp.timestamp()}-{line_num}",
             timestamp=timestamp,
             level=LogLevel.ERROR,
-            message=f"PARSE_ERROR: {line[:100]}",
-            module="parser",
+            message=f"PARSE_ERROR: {line}",
+            module="LogViewer-parser",
             operation=OperationType.UNKNOWN,
             raw_data={"original_line": line, "error": error},
             parse_error=True,
             error_type=error
-
         )
 
     def _extract_timestamp_from_line(self, line: str) -> Optional[datetime]:
@@ -429,7 +448,7 @@ class RobustTerraformParser:
                     continue
         return None
 
-    def _heuristic_parse_timestamp(self, data: Dict, original_line: str = "") -> datetime:
+    def _heuristic_parse_timestamp(self, data: Dict, original_line: str = "") -> Optional[datetime]:
         timestamp_str = data.get('@timestamp') or data.get('timestamp')
         if timestamp_str:
             try:
@@ -444,7 +463,7 @@ class RobustTerraformParser:
                 pass
 
         extracted_ts = self._extract_timestamp_from_line(original_line or data.get('@message', ''))
-        return extracted_ts if extracted_ts else datetime.now()
+        return extracted_ts
 
     def _heuristic_detect_level(self, data: Dict, original_line: str = "") -> LogLevel:
         level_str = data.get('@level') or data.get('level')
@@ -696,7 +715,7 @@ async def upload_logs_v2(file: UploadFile = File(...)):
         content = (await file.read()).decode('utf-8')
         entries = parser.parse_log_file(content, file.filename)
         uploaded_logs.extend(entries)
-
+        
         parse_errors = [e for e in entries if e.parse_error]
         operation_stats = {}
         for entry in entries:
@@ -763,21 +782,23 @@ async def get_logs_keys():
 @app.get("/api/v2/filter_enh/keys")
 async def get_logs_keys():
     """Возвращает все уникальные поля из загруженных логов (и из сырых, и из парсированных)"""
-    all_fields = set()
+    all_non_null_fields = set()
     
-    # Поля из сырых логов
+    # Поля из сырых логов (только словари)
     for log in raw_uploaded_logs:
-        all_fields.update(log.keys())
+        if isinstance(log, dict):
+            for key, value in log.items():
+                if value is not None:  # Исключаем null значения
+                    all_non_null_fields.add(key)
     
     # Поля из парсированных логов (через модель)
     for entry in uploaded_logs:
-        # Добавляем поля из модели
-        all_fields.update(entry.raw_data.keys())
-        # Добавляем стандартные поля модели
-        # all_fields.update(['id', 'timestamp', 'level', 'message', 'module', 'operation'])
-        # похуй лучшее без дубликаций прям 
+        entry_dict = entry.model_dump()
+        for key, value in entry_dict.items():
+            if value is not None:  # Исключаем null значения
+                all_non_null_fields.add(key)
     
-    return sorted(all_fields)
+    return sorted(all_non_null_fields)
 
 
 @app.post("/api/v2/filter")
