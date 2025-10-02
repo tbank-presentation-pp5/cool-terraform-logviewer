@@ -5,13 +5,13 @@ import json
 import re
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # ========== MODELS ==========
@@ -30,6 +30,16 @@ class OperationType(str, Enum):
     UNKNOWN = "unknown"
 
 
+def normalize(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [s.strip() for s in value.split(',') if s.strip()]
+    if isinstance(value, list):
+        return [str(s).strip() for s in value if s is not None]
+    raise TypeError('Invalid type')
+
+
 class TerraformLogEntry(BaseModel):
     id: Optional[str] = None
     timestamp: datetime
@@ -42,7 +52,7 @@ class TerraformLogEntry(BaseModel):
     Accept: Optional[str] = None
     Accept_Encoding: Optional[str] = None
     Access_Control_Expose_Headers: Optional[str] = None
-    Cache_Control: Optional[str] = None
+    Cache_Control: Union[str, List[str]] = None
     Connection: Optional[str] = None
     Content_Length: Optional[str] = None
     Content_Security_Policy: Optional[str] = None
@@ -60,7 +70,7 @@ class TerraformLogEntry(BaseModel):
     Set_Cookie: Optional[str] = None
     Strict_Transport_Security: Optional[str] = None
     User_Agent: Optional[str] = None
-    Vary: Optional[str] = None
+    Vary: Union[str, List[str]] = None
     Via: Optional[str] = None
     X_Content_Type_Options: Optional[str] = None
     X_Frame_Options: Optional[str] = None
@@ -69,25 +79,25 @@ class TerraformLogEntry(BaseModel):
     X_Request_Id: Optional[str] = None
     X_Runtime: Optional[str] = None
     address: Optional[str] = None
-    args: Optional[str] = None
+    args: List[str] = None
     channel: Optional[str] = None
     description: Optional[str] = None
     diagnostic_attribute: Optional[str] = None
     diagnostic_detail: Optional[str] = None
-    diagnostic_error_count: Optional[str] = None
+    diagnostic_error_count: int = None
     diagnostic_severity: Optional[str] = None
     diagnostic_summary: Optional[str] = None
-    diagnostic_warning_count: Optional[str] = None
+    diagnostic_warning_count: int = None
     err: Optional[str] = None
-    len: Optional[str] = None
+    len: int = None
     network: Optional[str] = None
     path: Optional[str] = None
-    pid: Optional[str] = None
+    pid: int = None
     plugin: Optional[str] = None
     tf_registry_stdout: Optional[str] = None
     tf_attribute_path: Optional[str] = None
-    tf_client_capability_deferral_allowed: Optional[str] = None
-    tf_client_capability_write_only_attributes_allowed: Optional[str] = None
+    tf_client_capability_deferral_allowed: bool = None
+    tf_client_capability_write_only_attributes_allowed: bool = None
     tf_data_source_type: Optional[str] = None
     tf_http_op_type: Optional[str] = None
     tf_http_req_body: Optional[str] = None
@@ -95,20 +105,20 @@ class TerraformLogEntry(BaseModel):
     tf_http_req_uri: Optional[str] = None
     tf_http_req_version: Optional[str] = None
     tf_http_res_body: Optional[str] = None
-    tf_http_res_status_code: Optional[str] = None
+    tf_http_res_status_code: int = None
     tf_http_res_status_reason: Optional[str] = None
     tf_http_res_version: Optional[str] = None
     tf_http_trans_id: Optional[str] = None
     tf_proto_version: Optional[str] = None
     tf_provider_addr: Optional[str] = None
-    tf_req_duration_ms: Optional[str] = None
+    tf_req_duration_ms: int = None
     tf_req_id: Optional[str] = None
     tf_resource_type: Optional[str] = None
     tf_rpc: Optional[str] = None
-    tf_server_capability_get_provider_schema_optional: Optional[str] = None
-    tf_server_capability_move_resource_state: Optional[str] = None
-    tf_server_capability_plan_destroy: Optional[str] = None
-    version: Optional[str] = None
+    tf_server_capability_get_provider_schema_optional: bool = None
+    tf_server_capability_move_resource_state: bool = None
+    tf_server_capability_plan_destroy: bool = None
+    version: int = None
     
     # Существующие технические поля
     operation: OperationType = OperationType.UNKNOWN
@@ -126,6 +136,23 @@ class TerraformLogEntry(BaseModel):
         data['level'] = self.level.value
         data['operation'] = self.operation.value
         return data
+
+    @field_validator('Cache_Control', mode='before')
+    def _norm_cache(cls, v):
+        return normalize(v)
+
+    @field_validator('Vary', mode='before')
+    def _norm_vary(cls, v):
+        return normalize(v)
+
+    # Опционально: гарантировать конечный тип — список строк
+    @field_validator('Cache_Control', mode='after')
+    def _ensure_cache_list(cls, v):
+        return list(v) if isinstance(v, (list, tuple)) else [v]
+
+    @field_validator('Vary', mode='after')
+    def _ensure_vary_list(cls, v):
+        return list(v) if isinstance(v, (list, tuple)) else [v]
 
 
 # ========== ENHANCED PARSER ==========
@@ -233,23 +260,139 @@ class RobustTerraformParser:
         tf_req_id = self._heuristic_find_req_id(data, original_line)
         json_blocks = self._extract_json_blocks(data)
 
-        return TerraformLogEntry(
-            id=f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(original_line.encode()).hexdigest()[:8]}",
-            timestamp=timestamp,
-            level=level,
-            message=data.get('@message', data.get('message', original_line[:200])),
-            module=data.get('@module', data.get('module')),
-            tf_req_id=tf_req_id,
-            tf_resource_type=data.get('tf_resource_type'),
-            tf_data_source_type=data.get('tf_data_source_type'),
-            tf_rpc=data.get('tf_rpc'),
-            tf_provider_addr=data.get('tf_provider_addr'),
-            operation=operation,
-            raw_data=data,
-            json_blocks=json_blocks,
-            parse_error=parse_error,
-            error_type=error_type
-        )
+        # return TerraformLogEntry(
+        #     id=f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(original_line.encode()).hexdigest()[:8]}",
+        #     timestamp=timestamp,
+        #     level=level,
+        #     message=data.get('@message', data.get('message', original_line[:200])),
+        #     module=data.get('@module', data.get('module')),
+        #     tf_req_id=tf_req_id,
+        #     tf_resource_type=data.get('tf_resource_type'),
+        #     tf_data_source_type=data.get('tf_data_source_type'),
+        #     tf_rpc=data.get('tf_rpc'),
+        #     tf_provider_addr=data.get('tf_provider_addr'),
+        #     operation=operation,
+        #     raw_data=data,
+        #     json_blocks=json_blocks,
+        #     parse_error=parse_error,
+        #     error_type=error_type
+        # )
+
+        # Базовые данные
+        entry_data = {
+            'id': f"{timestamp.timestamp()}-{line_num}-{hashlib.md5(original_line.encode()).hexdigest()[:8]}",
+            'timestamp': timestamp,
+            'level': level,
+            'message': data.get('@message', data.get('message', original_line[:200])),
+            'module': data.get('@module', data.get('module')),
+            'tf_req_id': tf_req_id,
+            'tf_resource_type': data.get('tf_resource_type'),
+            'tf_data_source_type': data.get('tf_data_source_type'),
+            'tf_rpc': data.get('tf_rpc'),
+            'tf_provider_addr': data.get('tf_provider_addr'),
+            'operation': operation,
+            'raw_data': data,
+            'json_blocks': json_blocks,
+            'parse_error': parse_error,
+            'error_type': error_type
+        }
+
+        # навсякий сделаю копию в случае если падаем юзаем
+        entry_data2 = entry_data.copy()
+
+        # Автоматическое заполнение всех полей модели из сырых данных
+        field_mappings = {
+            # Прямые маппинги
+            'caller': ['caller', '@caller'],
+            'Accept': ['Accept'],
+            'Accept_Encoding': ['Accept-Encoding', 'Accept_Encoding'],
+            'Access_Control_Expose_Headers': ['Access-Control-Expose-Headers', 'Access_Control_Expose_Headers'],
+            'Cache_Control': ['Cache-Control', 'Cache_Control'],
+            'Connection': ['Connection'],
+            'Content_Length': ['Content-Length', 'Content_Length'],
+            'Content_Security_Policy': ['Content-Security-Policy', 'Content_Security_Policy'],
+            'Content_Type': ['Content-Type', 'Content_Type'],
+            'Date': ['Date'],
+            'EXTRA_VALUE_AT_END': ['EXTRA_VALUE_AT_END'],
+            'Etag': ['Etag'],
+            'Expires': ['Expires'],
+            'Host': ['Host'],
+            'Keep_Alive': ['Keep-Alive', 'Keep_Alive'],
+            'Permissions_Policy': ['Permissions-Policy', 'Permissions_Policy'],
+            'Pragma': ['Pragma'],
+            'Referrer_Policy': ['Referrer-Policy', 'Referrer_Policy'],
+            'Server': ['Server'],
+            'Set_Cookie': ['Set-Cookie', 'Set_Cookie'],
+            'Strict_Transport_Security': ['Strict-Transport-Security', 'Strict_Transport_Security'],
+            'User_Agent': ['User-Agent', 'User_Agent'],
+            'Vary': ['Vary'],
+            'Via': ['Via'],
+            'X_Content_Type_Options': ['X-Content-Type-Options', 'X_Content_Type_Options'],
+            'X_Frame_Options': ['X-Frame-Options', 'X_Frame_Options'],
+            'X_Kong_Proxy_Latency': ['X-Kong-Proxy-Latency', 'X_Kong_Proxy_Latency'],
+            'X_Kong_Upstream_Latency': ['X-Kong-Upstream-Latency', 'X_Kong_Upstream_Latency'],
+            'X_Request_Id': ['X-Request-Id', 'X_Request_Id'],
+            'X_Runtime': ['X-Runtime', 'X_Runtime'],
+            'address': ['address'],
+            'args': ['args'],
+            'channel': ['channel'],
+            'description': ['description'],
+            'diagnostic_attribute': ['diagnostic_attribute'],
+            'diagnostic_detail': ['diagnostic_detail'],
+            'diagnostic_error_count': ['diagnostic_error_count'],
+            'diagnostic_severity': ['diagnostic_severity'],
+            'diagnostic_summary': ['diagnostic_summary'],
+            'diagnostic_warning_count': ['diagnostic_warning_count'],
+            'err': ['err'],
+            'len': ['len'],
+            'network': ['network'],
+            'path': ['path'],
+            'pid': ['pid'],
+            'plugin': ['plugin'],
+            'tf_registry_stdout': ['tf-registry.t1.cloud/t1cloud/t1cloud:stdout', 'tf_registry_stdout'],
+            'tf_attribute_path': ['tf_attribute_path'],
+            'tf_client_capability_deferral_allowed': ['tf_client_capability_deferral_allowed'],
+            'tf_client_capability_write_only_attributes_allowed': ['tf_client_capability_write_only_attributes_allowed'],
+            'tf_data_source_type': ['tf_data_source_type'],
+            'tf_http_op_type': ['tf_http_op_type'],
+            'tf_http_req_body': ['tf_http_req_body'],
+            'tf_http_req_method': ['tf_http_req_method'],
+            'tf_http_req_uri': ['tf_http_req_uri'],
+            'tf_http_req_version': ['tf_http_req_version'],
+            'tf_http_res_body': ['tf_http_res_body'],
+            'tf_http_res_status_code': ['tf_http_res_status_code'],
+            'tf_http_res_status_reason': ['tf_http_res_status_reason'],
+            'tf_http_res_version': ['tf_http_res_version'],
+            'tf_http_trans_id': ['tf_http_trans_id'],
+            'tf_proto_version': ['tf_proto_version'],
+            'tf_provider_addr': ['tf_provider_addr'],
+            'tf_req_duration_ms': ['tf_req_duration_ms'],
+            'tf_req_id': ['tf_req_id'],
+            'tf_resource_type': ['tf_resource_type'],
+            'tf_rpc': ['tf_rpc'],
+            'tf_server_capability_get_provider_schema_optional': ['tf_server_capability_get_provider_schema_optional'],
+            'tf_server_capability_move_resource_state': ['tf_server_capability_move_resource_state'],
+            'tf_server_capability_plan_destroy': ['tf_server_capability_plan_destroy'],
+            'version': ['version']
+        }
+
+        # Заполняем поля модели из сырых данных
+        for model_field, source_fields in field_mappings.items():
+            for source_field in source_fields:
+                if source_field in data:
+                    entry_data[model_field] = data[source_field]
+                    break
+
+        # return TerraformLogEntry(**entry_data)
+        try:
+            return TerraformLogEntry(**entry_data)
+        except Exception as e:
+            print(f"Error creating entry: {e}")
+            print(f"Entry data keys: {entry_data.keys()}")
+            for key, value in entry_data.items():
+                print(f"  {key}: {value} (type: {type(value)})")
+            # заполнем копией без доп параметров.
+            return TerraformLogEntry(**entry_data2)
 
     def _create_error_entry(self, line: str, line_num: int, filename: str, error: str) -> TerraformLogEntry:
         timestamp = self._extract_timestamp_from_line(line) or datetime.now()
